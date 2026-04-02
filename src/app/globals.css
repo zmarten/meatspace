@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --hitl-bg: #0a0a0c;
+  --hitl-surface: #131318;
+  --hitl-surface-hover: #1a1a21;
+  --hitl-border: #25252e;
+  --hitl-border-hover: #35354a;
+  --hitl-text: #e8e6e3;
+  --hitl-text-secondary: #9a9890;
+  --hitl-text-muted: #5a5955;
+  --hitl-accent: #7c6aef;
+  --hitl-accent-soft: rgba(124, 106, 239, 0.12);
+  --hitl-approve: #34d399;
+  --hitl-approve-soft: rgba(52, 211, 153, 0.12);
+  --hitl-reject: #f87171;
+  --hitl-reject-soft: rgba(248, 113, 113, 0.12);
+  --hitl-warning: #fbbf24;
+  --hitl-warning-soft: rgba(251, 191, 36, 0.12);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--hitl-bg);
+  color: var(--hitl-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Topo background pattern — subtle */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cpath d='M200 50c-80 0-150 60-150 140s70 140 150 140 150-60 150-140S280 50 200 50z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3Cpath d='M200 90c-60 0-110 45-110 100s50 100 110 100 110-45 110-100S260 90 200 90z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3Cpath d='M200 130c-40 0-70 28-70 60s30 60 70 60 70-28 70-60-30-60-70-60z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 400px 400px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#__next {
+  position: relative;
+  z-index: 1;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--hitl-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--hitl-border-hover); }
+
+/* Selection */
+::selection {
+  background: var(--hitl-accent-soft);
+  color: var(--hitl-accent);
+}

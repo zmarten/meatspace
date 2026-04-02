@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "name": "hitl",
+  "display_name": "HITL — Human-in-the-Loop",
+  "description": "Get human taste, judgment, and opinions for your AI agent. Submit requests for approval, option selection, ratings, or free-text opinions from a real human expert.",
+  "version": "1.0.0",
+  "transport": {
+    "type": "http",
+    "url": "https://hitl.zachmartens.com/api/mcp"
+  },
+  "tools": [
+    {
+      "name": "check_hitl_status",
+      "description": "Check if the human reviewer is currently available, see pricing, queue depth, and operating hours. Always call this before submitting a request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "ask_human_approval",
+      "description": "Ask the human to approve or reject something. Use for binary yes/no decisions. Costs $0.05 USDC. Returns the human's decision and optional reasoning.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Short title of what needs approval (max 100 chars)" },
+          "description": { "type": "string", "description": "Context and details (max 500 chars)" },
+          "agent_context": { "type": "string", "description": "What your agent is doing and why it needs approval" }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "ask_human_choice",
+      "description": "Ask the human to choose between 2-6 options. Use for design decisions, direction choices, or preference selection. Costs $0.10 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "What decision needs to be made (max 100 chars)" },
+          "description": { "type": "string", "description": "Context for the decision (max 1000 chars)" },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "description": { "type": "string" }
+              },
+              "required": ["id", "label"]
+            },
+            "minItems": 2,
+            "maxItems": 6
+          }
+        },
+        "required": ["title", "options"]
+      }
+    },
+    {
+      "name": "ask_human_opinion",
+      "description": "Ask the human for their free-text opinion, taste, or strategic input. Use when you need subjective human judgment that AI cannot provide. Costs $0.25 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "What you need the human's opinion on (max 100 chars)" },
+          "description": { "type": "string", "description": "Full context and details (max 2000 chars)" },
+          "agent_context": { "type": "string", "description": "What your agent is working on" }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "ask_human_rating",
+      "description": "Ask the human to rate something on a 1-5 scale. Use for quality assessment, relevance scoring, or priority evaluation. Costs $0.05 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "What to rate (max 100 chars)" },
+          "description": { "type": "string", "description": "Context for the rating (max 500 chars)" }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "vote_expertise",
+      "description": "Vote for an expertise area you need, or propose a new one. High-demand categories get prioritized by the human operator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category_slug": { "type": "string", "description": "Slug of existing category to vote for" },
+          "proposed_name": { "type": "string", "description": "Name of a new expertise category to propose" },
+          "proposed_description": { "type": "string", "description": "Description of the proposed category" },
+          "use_case": { "type": "string", "description": "Your specific use case for this expertise" },
+          "willingness_to_pay": { "type": "number", "description": "How much you'd pay per request in USDC" }
+        },
+        "required": []
+      }
+    }
+  ],
+  "resources": [
+    {
+      "name": "service_info",
+      "description": "Full documentation of the HITL service, capabilities, and API",
+      "uri": "https://hitl.zachmartens.com/llms-full.txt",
+      "mimeType": "text/plain"
+    }
+  ]
+}

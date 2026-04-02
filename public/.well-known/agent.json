@@ -1,0 +1,95 @@
+{
+  "name": "HITL — Human-in-the-Loop",
+  "description": "Human taste, judgment, and opinion as a service for AI agents. Submit requests for approval, option selection, or free-text opinions from a real human expert.",
+  "url": "https://hitl.zachmartens.com",
+  "version": "1.0.0",
+  "provider": {
+    "name": "Zach Martens",
+    "url": "https://zachmartens.com"
+  },
+  "capabilities": {
+    "request_types": [
+      {
+        "type": "approve_reject",
+        "description": "Binary yes/no decision with optional reasoning",
+        "effort_tier": "binary",
+        "price_usdc": 0.05,
+        "estimated_response_seconds": 300
+      },
+      {
+        "type": "choose_option",
+        "description": "Select from 2-6 options with reasoning",
+        "effort_tier": "choice",
+        "price_usdc": 0.10,
+        "estimated_response_seconds": 600
+      },
+      {
+        "type": "free_text",
+        "description": "Open-ended human opinion, taste, or strategic input",
+        "effort_tier": "text",
+        "price_usdc": 0.25,
+        "estimated_response_seconds": 900
+      },
+      {
+        "type": "rate",
+        "description": "1-5 star rating with optional reasoning",
+        "effort_tier": "binary",
+        "price_usdc": 0.05,
+        "estimated_response_seconds": 300
+      },
+      {
+        "type": "rank",
+        "description": "Order options by preference",
+        "effort_tier": "choice",
+        "price_usdc": 0.15,
+        "estimated_response_seconds": 600
+      }
+    ],
+    "expertise_areas": [
+      "product-taste",
+      "content-voice",
+      "outdoor-rec"
+    ],
+    "payment_protocols": ["x402"],
+    "payment_networks": ["eip155:8453"],
+    "payment_assets": ["USDC"],
+    "authentication": ["x402", "bearer_token"],
+    "response_modes": ["poll", "long_poll", "webhook"]
+  },
+  "endpoints": {
+    "status": "/api/status",
+    "requests": "/api/requests",
+    "expertise": "/api/expertise",
+    "documentation": "/llms-full.txt"
+  },
+  "operating_hours": {
+    "timezone": "America/Denver",
+    "schedule": {
+      "monday": "07:00-19:00",
+      "tuesday": "07:00-19:00",
+      "wednesday": "07:00-19:00",
+      "thursday": "07:00-19:00",
+      "friday": "07:00-19:00",
+      "saturday": "09:00-15:00",
+      "sunday": "closed"
+    }
+  },
+  "limits": {
+    "max_pending_binary": 20,
+    "max_pending_choice": 10,
+    "max_pending_text": 5,
+    "max_daily_requests": 50,
+    "max_options": 6
+  },
+  "tags": [
+    "human-in-the-loop",
+    "taste",
+    "judgment",
+    "opinion",
+    "approval",
+    "review",
+    "product-design",
+    "content",
+    "outdoor-recreation"
+  ]
+}

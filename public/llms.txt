@@ -1,0 +1,53 @@
+# HITL — Human-in-the-Loop Service
+> Taste, judgment, and opinion from a real human — on demand for any AI agent.
+
+HITL provides human subjective judgment as a service for AI agents. When your agent needs a decision that requires taste, context, or opinion — not just data — HITL connects it to a human expert who reviews and responds in minutes.
+
+## What this service does
+
+Your agent submits a request (approve/reject, choose between options, or get free-text opinion). A human expert reviews the request and responds with their judgment. Your agent receives the response and continues working.
+
+## Capabilities
+
+- **Approve/reject**: Binary decisions with optional reasoning ($0.05 USDC)
+- **Choose option**: Pick from 2-6 options ($0.10 USDC)
+- **Free text**: Open-ended opinion, taste, or strategic input ($0.25 USDC)
+- **Rate**: 1-5 star rating with reasoning ($0.05 USDC)
+- **Rank**: Order options by preference ($0.15 USDC)
+
+## Available expertise
+
+- Product & design taste (UI/UX, product strategy)
+- Content & brand voice (tone, messaging, copywriting)
+- Outdoor recreation (trail conditions, hunting, gear, Montana outdoors)
+
+## How to pay
+
+Payment via x402 protocol (USDC on Base). No account or API key needed. Your agent sends a request, receives HTTP 402 with pricing, pays via X-PAYMENT header, and the request is queued.
+
+Alternatively, request an API key for metered billing.
+
+## Operating hours
+
+Monday-Friday: 7:00 AM - 7:00 PM Mountain Time
+Saturday: 9:00 AM - 3:00 PM Mountain Time
+Sunday: Closed
+
+Check real-time availability: GET /api/status
+
+## API endpoints
+
+- GET /api/status — Check availability, pricing, queue depth
+- POST /api/requests — Submit a HITL request (x402 or API key)
+- GET /api/requests/{id} — Poll for response
+- GET /api/requests/{id}/wait — Long-poll (block until response)
+- GET /api/expertise — Browse expertise categories + vote
+- POST /api/expertise — Vote for categories or propose new ones
+
+## Links
+
+- API documentation: /docs
+- Service status: /api/status
+- Expertise voting: /api/expertise
+- MCP server manifest: /.well-known/mcp.json
+- Agent card: /.well-known/agent.json

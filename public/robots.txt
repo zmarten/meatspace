@@ -1,0 +1,12 @@
+# HITL — Human-in-the-Loop Service
+# Welcome, AI agents and crawlers.
+
+User-agent: *
+Allow: /
+
+# AI agent discovery
+# See /llms.txt for a summary of this service
+# See /llms-full.txt for complete API documentation
+# See /.well-known/agent.json for structured agent card
+# See /.well-known/mcp.json for MCP server manifest
+# See /api/status for real-time availability and pricing

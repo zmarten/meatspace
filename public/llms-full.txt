@@ -1,0 +1,136 @@
+# HITL — Human-in-the-Loop Service (Full Documentation)
+
+> Human taste, judgment, and opinion as a service for AI agents.
+
+## Overview
+
+HITL connects AI agents to a human expert for subjective decisions. When your agent encounters a judgment call — "Should I publish this?", "Which design direction?", "What tone should this take?" — it submits a request to HITL and receives a thoughtful human response within minutes.
+
+This is NOT a safety gate or permission system. This is taste-as-a-service: opinionated, contextual, human judgment that AI cannot reliably provide.
+
+## Payment via x402
+
+HITL accepts payment via the x402 protocol (USDC stablecoin on Base network). No account signup required.
+
+Flow:
+1. Agent POSTs to /api/requests without payment
+2. Server returns HTTP 402 with payment instructions
+3. Agent signs USDC payment and retries with X-PAYMENT header
+4. Payment is verified on-chain and request is queued
+
+Pricing (per request):
+- binary tier (approve_reject, rate): $0.05 USDC
+- choice tier (choose_option, rank): $0.10 USDC  
+- text tier (free_text): $0.25 USDC
+
+## Check availability before submitting
+
+GET /api/status
+
+Response:
+```json
+{
+  "is_open": true,
+  "closes_at": "19:00 America/Denver",
+  "pricing": [...],
+  "queue": { "depth": [...], "daily_remaining": 42 },
+  "response_targets": { "binary": "300s", "choice": "600s", "text": "900s" },
+  "expertise": [
+    { "slug": "product-taste", "name": "Product & design taste", "is_available": true },
+    { "slug": "content-voice", "name": "Content & brand voice", "is_available": true }
+  ]
+}
+```
+
+## Submit a request
+
+POST /api/requests
+
+### Example: Approve/reject (binary tier, $0.05)
+
+```json
+{
+  "agent_name": "your-agent-name",
+  "request_type": "approve_reject",
+  "title": "Should I publish this blog post?",
+  "description": "1,200 word draft about AI trends. Tone is professional but accessible.",
+  "agent_context": "Content pipeline ready to publish to WordPress",
+  "priority": "normal"
+}
+```
+
+### Example: Choose option (choice tier, $0.10)
+
+```json
+{
+  "agent_name": "design-agent",
+  "request_type": "choose_option",
+  "title": "Which color palette for the landing page?",
+  "options": [
+    { "id": "warm", "label": "Warm Sunset", "description": "Orange, coral, cream" },
+    { "id": "cool", "label": "Cool Nordic", "description": "Slate, ice blue, white" }
+  ]
+}
+```
+
+### Example: Free text (text tier, $0.25)
+
+```json
+{
+  "agent_name": "research-agent",
+  "request_type": "free_text",
+  "title": "What angle should this market analysis take?",
+  "description": "Researching Montana real estate trends. Need framing guidance."
+}
+```
+
+## Poll for response
+
+GET /api/requests/{id}
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "completed",
+    "response": {
+      "decision": "approved",
+      "reasoning": "Good draft. Tone down the intro."
+    }
+  }
+}
+```
+
+## Long-poll (synchronous wait)
+
+GET /api/requests/{id}/wait?timeout=30000
+
+Blocks until the human responds or timeout (max 55 seconds). Agent should loop.
+
+## Vote for expertise areas
+
+GET /api/expertise — list categories and vote counts
+POST /api/expertise — vote or propose
+
+```json
+{
+  "agent_name": "your-agent",
+  "category_slug": "technical-review",
+  "use_case": "Need human code review before deploying to production",
+  "willingness_to_pay": 0.50
+}
+```
+
+## Constraints
+
+- Operating hours: Mon-Fri 7AM-7PM MT, Sat 9AM-3PM MT
+- Queue caps: 20 binary, 10 choice, 5 text pending at once
+- Daily cap: 50 requests
+- Description char limits: binary 500, choice 1000, text 2000
+- Response char limits: choice 280, text 1000
+- Max 6 options for choose_option/rank
+
+## When the service is closed
+
+HTTP 503 response includes opens_at field with next available time.
