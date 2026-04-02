@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { validateApiKey } from '@/lib/auth';
+import { validateApiKey, isAllowedCallbackUrl } from '@/lib/auth';
 import { checkCapacity, getEffortTier } from '@/lib/capacity';
 import { checkPayment } from '@/lib/payments';
+import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
 
 export async function POST(req: NextRequest) {
@@ -18,6 +19,37 @@ export async function POST(req: NextRequest) {
       { success: false, error: 'Missing required fields: agent_name, request_type, title' },
       { status: 400 }
     );
+  }
+
+  // Input length validation
+  if (body.title.length > 200) {
+    return NextResponse.json({ success: false, error: 'title exceeds 200 char limit' }, { status: 400 });
+  }
+  if (body.agent_name.length > 100) {
+    return NextResponse.json({ success: false, error: 'agent_name exceeds 100 char limit' }, { status: 400 });
+  }
+  if (body.agent_context && body.agent_context.length > 2000) {
+    return NextResponse.json({ success: false, error: 'agent_context exceeds 2000 char limit' }, { status: 400 });
+  }
+  if (body.category && body.category.length > 100) {
+    return NextResponse.json({ success: false, error: 'category exceeds 100 char limit' }, { status: 400 });
+  }
+  if (body.callback_url && body.callback_url.length > 2048) {
+    return NextResponse.json({ success: false, error: 'callback_url exceeds 2048 char limit' }, { status: 400 });
+  }
+  if (body.tags) {
+    if (body.tags.length > 10) {
+      return NextResponse.json({ success: false, error: 'Maximum 10 tags allowed' }, { status: 400 });
+    }
+    if (body.tags.some((t: string) => t.length > 50)) {
+      return NextResponse.json({ success: false, error: 'Each tag must be 50 chars or less' }, { status: 400 });
+    }
+  }
+  if (body.payload && JSON.stringify(body.payload).length > 10240) {
+    return NextResponse.json({ success: false, error: 'payload exceeds 10KB limit' }, { status: 400 });
+  }
+  if (body.callback_method === 'webhook' && body.callback_url && !isAllowedCallbackUrl(body.callback_url)) {
+    return NextResponse.json({ success: false, error: 'callback_url must be a valid HTTPS URL on a public host' }, { status: 400 });
   }
 
   const validTypes = ['approve_reject', 'choose_option', 'free_text', 'rate', 'rank'];
@@ -87,37 +119,21 @@ export async function POST(req: NextRequest) {
   }
 
   // Create the request
-  const supabase = createServiceClient();
-  const { data, error } = await supabase
-    .from('hitl_requests')
-    .insert({
-      api_key_id: apiKeyId || null,
-      agent_name: body.agent_name,
-      agent_context: body.agent_context,
-      request_type: body.request_type,
-      title: body.title,
-      description: body.description,
-      payload: body.payload || {},
-      options: body.options || [],
-      priority: body.priority || 'normal',
-      tags: body.tags || [],
-      category: body.category,
-      callback_method: body.callback_method || 'poll',
-      callback_url: body.callback_url,
-      timeout_seconds: body.timeout_seconds || 3600,
-      effort_tier: payment.effort_tier,
-      price_usdc: payment.price_usdc,
-      payment_method: payment.method,
-      payment_tx_hash: payment.tx_hash || null,
-      payment_verified: payment.verified,
-    })
-    .select()
-    .single();
+  const result = await createHitlRequest({
+    body,
+    apiKeyId,
+    paymentMethod: payment.method,
+    effortTier: effortTier as any,
+    priceUsdc: payment.price_usdc,
+    paymentTxHash: payment.tx_hash,
+    paymentVerified: payment.verified,
+  });
 
-  if (error) {
-    console.error('Supabase insert error:', error);
-    return NextResponse.json({ success: false, error: 'Failed to create request' }, { status: 500 });
+  if ('error' in result) {
+    return NextResponse.json({ success: false, error: result.error }, { status: result.status });
   }
+
+  const data = result.data;
 
   return NextResponse.json({
     success: true,

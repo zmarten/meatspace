@@ -1,29 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-
-interface OperatingConfig {
-  timezone: string;
-  weekly_schedule: Array<{ day: number; open: string; close: string; enabled: boolean }>;
-  max_pending_binary: number;
-  max_pending_choice: number;
-  max_pending_text: number;
-  max_daily_requests: number;
-  force_open: boolean;
-  force_closed: boolean;
-  closed_message: string;
-  target_response_binary: number;
-  target_response_choice: number;
-  target_response_text: number;
-}
-
-interface Pricing {
-  effort_tier: string;
-  price_usdc: number;
-  description: string;
-  max_description_chars: number;
-  max_response_chars: number;
-}
+import { OperatingConfig, Pricing } from '@/types';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -43,7 +21,9 @@ export default function SettingsPage() {
   }, []);
 
   const fetchStats = useCallback(async () => {
-    const res = await fetch('/api/stats');
+    const res = await fetch('/api/stats', {
+      headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '' },
+    });
     const json = await res.json();
     if (json.success) setStats(json.data);
   }, []);
@@ -54,7 +34,10 @@ export default function SettingsPage() {
     setSaving(true);
     const res = await fetch('/api/config', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '',
+      },
       body: JSON.stringify(updates),
     });
     const json = await res.json();

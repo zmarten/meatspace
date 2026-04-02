@@ -35,12 +35,14 @@ export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   useEffect(() => {
     fetchRequests();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes (filter server-side when possible)
+    const channelName = statusFilter === 'all' ? 'hitl-requests' : `hitl-requests-${statusFilter}`;
+    const filter = statusFilter !== 'all' ? `status=eq.${statusFilter}` : undefined;
     channelRef.current = supabase
-      .channel('hitl-requests')
+      .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'hitl_requests' },
+        { event: '*', schema: 'public', table: 'hitl_requests', ...(filter ? { filter } : {}) },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             setRequests(prev => [payload.new as HitlRequest, ...prev]);
@@ -83,7 +85,9 @@ export function useStats() {
 
   useEffect(() => {
     async function fetch() {
-      const res = await globalThis.fetch('/api/stats');
+      const res = await globalThis.fetch('/api/stats', {
+        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '' },
+      });
       const json = await res.json();
       if (json.success) setStats(json.data);
     }
@@ -98,7 +102,10 @@ export function useStats() {
 export async function submitResponse(id: string, response: Record<string, any>) {
   const res = await fetch(`/api/requests/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '',
+    },
     body: JSON.stringify(response),
   });
   return res.json();

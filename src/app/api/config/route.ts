@@ -24,7 +24,6 @@ export async function GET() {
 
 // PATCH /api/config — update operating config
 export async function PATCH(req: NextRequest) {
-  // TODO: Add dashboard auth check here
   const supabase = createServiceClient();
 
   try {

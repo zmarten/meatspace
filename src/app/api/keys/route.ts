@@ -4,7 +4,6 @@ import { generateApiKey, hashApiKey } from '@/lib/auth';
 
 // POST /api/keys - Create a new API key
 export async function POST(req: NextRequest) {
-  // TODO: Add dashboard auth check here
   const supabase = createServiceClient();
 
   try {

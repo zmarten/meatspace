@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { isAllowedCallbackUrl } from '@/lib/auth';
+import { deliverWebhook } from '@/lib/webhooks';
 import { SubmitResponseBody } from '@/types';
 
 // GET /api/requests/[id] - Poll request status (agent calls this)
@@ -60,6 +62,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   try {
     const body: SubmitResponseBody = await req.json();
+
+    // Runtime validation: response must match request type
+    const rt = request.request_type;
+    if (rt === 'approve_reject') {
+      if (!body.decision || !['approved', 'rejected'].includes(body.decision)) {
+        return NextResponse.json({ success: false, error: 'decision must be "approved" or "rejected"' }, { status: 400 });
+      }
+    } else if (rt === 'rate') {
+      if (typeof body.rating !== 'number' || body.rating < 1 || body.rating > 5) {
+        return NextResponse.json({ success: false, error: 'rating must be a number between 1 and 5' }, { status: 400 });
+      }
+    } else if (rt === 'choose_option') {
+      if (!body.selected_option || typeof body.selected_option !== 'string') {
+        return NextResponse.json({ success: false, error: 'selected_option is required as a string' }, { status: 400 });
+      }
+    } else if (rt === 'free_text') {
+      if (!body.text || typeof body.text !== 'string' || body.text.trim().length === 0) {
+        return NextResponse.json({ success: false, error: 'text is required as a non-empty string' }, { status: 400 });
+      }
+    } else if (rt === 'rank') {
+      if (!Array.isArray(body.ranking)) {
+        return NextResponse.json({ success: false, error: 'ranking must be an array' }, { status: 400 });
+      }
+    }
+
     const now = new Date();
     const responseTimeMs = now.getTime() - new Date(request.created_at).getTime();
 
@@ -79,22 +106,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ success: false, error: 'Failed to submit response' }, { status: 500 });
     }
 
-    // Fire webhook if configured
+    // Fire webhook if configured (with SSRF protection)
     if (request.callback_method === 'webhook' && request.callback_url) {
-      try {
-        await fetch(request.callback_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+      if (!isAllowedCallbackUrl(request.callback_url)) {
+        console.warn(`Blocked webhook to disallowed URL: ${request.callback_url}`);
+      } else {
+        let keyHash = 'unsigned';
+        if (request.api_key_id) {
+          const { data: keyData } = await supabase
+            .from('hitl_api_keys')
+            .select('key_hash')
+            .eq('id', request.api_key_id)
+            .single();
+          if (keyData) keyHash = keyData.key_hash;
+        }
+        const result = await deliverWebhook({
+          url: request.callback_url,
+          payload: {
             event: 'request.completed',
             request_id: id,
             response: body,
             responded_at: now.toISOString(),
-          }),
+          },
+          apiKeyHash: keyHash,
         });
-      } catch (webhookErr) {
-        console.error('Webhook delivery failed:', webhookErr);
-        // Don't fail the response — webhook is best-effort
+        if (!result.success) {
+          console.error('Webhook delivery failed:', result.error);
+        }
       }
     }
 

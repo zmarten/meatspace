@@ -93,3 +93,35 @@ export interface PollResponse {
   response?: HitlResponse;
   responded_at?: string;
 }
+
+// Operating configuration types (shared across capacity, settings, config)
+
+export interface DaySchedule {
+  day: number;
+  open: string;
+  close: string;
+  enabled: boolean;
+}
+
+export interface OperatingConfig {
+  timezone: string;
+  weekly_schedule: DaySchedule[];
+  max_pending_binary: number;
+  max_pending_choice: number;
+  max_pending_text: number;
+  max_daily_requests: number;
+  force_open: boolean;
+  force_closed: boolean;
+  closed_message: string;
+  target_response_binary: number;
+  target_response_choice: number;
+  target_response_text: number;
+}
+
+export interface Pricing {
+  effort_tier: string;
+  price_usdc: number;
+  description: string;
+  max_description_chars: number;
+  max_response_chars: number;
+}

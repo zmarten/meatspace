@@ -1,24 +1,5 @@
 import { createServiceClient } from './supabase';
-
-interface OperatingConfig {
-  timezone: string;
-  weekly_schedule: Array<{
-    day: number;
-    open: string;
-    close: string;
-    enabled: boolean;
-  }>;
-  max_pending_binary: number;
-  max_pending_choice: number;
-  max_pending_text: number;
-  max_daily_requests: number;
-  force_open: boolean;
-  force_closed: boolean;
-  closed_message: string;
-  target_response_binary: number;
-  target_response_choice: number;
-  target_response_text: number;
-}
+import { EffortTier, OperatingConfig } from '@/types';
 
 interface CapacityStatus {
   is_open: boolean;
@@ -37,8 +18,6 @@ interface CapacityStatus {
     text: number;
   };
 }
-
-type EffortTier = 'binary' | 'choice' | 'text';
 
 // Map request_type to effort_tier
 export function getEffortTier(requestType: string): EffortTier {
@@ -199,12 +178,6 @@ export async function checkCapacity(effortTier: EffortTier): Promise<CapacitySta
   } else if (dailyRemaining <= 0) {
     reason = 'Daily request limit reached. Try again tomorrow.';
   }
-
-  // Estimate response time based on queue depth
-  const queueMultiplier = (effortTier === 'binary' ? pendingBinary : effortTier === 'choice' ? pendingChoice : pendingText) + 1;
-  const baseTime = effortTier === 'binary' ? config.target_response_binary
-    : effortTier === 'choice' ? config.target_response_choice
-    : config.target_response_text;
 
   return {
     is_open,

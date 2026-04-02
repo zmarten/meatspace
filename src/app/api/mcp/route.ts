@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { validateApiKey } from '@/lib/auth';
 import { getServiceStatus, checkCapacity, getEffortTier } from '@/lib/capacity';
 import { checkPayment } from '@/lib/payments';
+import { createHitlRequest } from '@/lib/requests';
 
 /**
  * MCP Server Route Handler
@@ -172,30 +174,26 @@ async function handleToolCall(toolName: string, args: Record<string, any>) {
   }
 
   // Create request (MCP requests use api_key auth, no x402 in MCP flow)
+  const result = await createHitlRequest({
+    body: {
+      agent_name: args.agent_name || 'mcp-agent',
+      agent_context: args.agent_context,
+      request_type: requestType as any,
+      title: args.title,
+      description: args.description,
+      options: args.options || [],
+      priority: args.priority || 'normal',
+      tags: ['mcp'],
+      callback_method: 'poll',
+      timeout_seconds: 3600,
+    },
+    paymentMethod: 'mcp',
+  });
+
+  if ('error' in result) return { error: result.error };
+  const data = result.data;
+
   const supabase = createServiceClient();
-
-  const insertData: Record<string, any> = {
-    agent_name: args.agent_name || 'mcp-agent',
-    agent_context: args.agent_context,
-    request_type: requestType,
-    title: args.title,
-    description: args.description,
-    payload: {},
-    options: args.options || [],
-    priority: args.priority || 'normal',
-    tags: ['mcp'],
-    callback_method: 'poll',
-    timeout_seconds: 3600,
-    payment_method: 'mcp',
-  };
-
-  const { data, error } = await supabase
-    .from('hitl_requests')
-    .insert(insertData)
-    .select()
-    .single();
-
-  if (error) return { error: 'Failed to create request' };
 
   // Long-poll for response (block up to 50 seconds for MCP)
   const deadline = Date.now() + 50000;
@@ -229,6 +227,15 @@ async function handleToolCall(toolName: string, args: Record<string, any>) {
 
 // MCP protocol handler
 export async function POST(req: NextRequest) {
+  // Require API key authentication
+  const auth = await validateApiKey(req);
+  if (!auth.valid) {
+    return NextResponse.json(
+      { jsonrpc: '2.0', error: { code: -32000, message: auth.error || 'Unauthorized: valid API key required' } },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { method, params, id } = body;

@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { NextRequest } from 'next/server';
 import { createServiceClient } from './supabase';
 
@@ -7,12 +7,24 @@ export function hashApiKey(key: string): string {
 }
 
 export function generateApiKey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let key = 'hitl_';
-  for (let i = 0; i < 40; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
+  return 'hitl_' + randomBytes(30).toString('base64url');
+}
+
+export function isAllowedCallbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+    if (host.startsWith('10.')) return false;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return false;
+    if (host.startsWith('192.168.')) return false;
+    if (host.startsWith('169.254.')) return false;
+    if (host === '0.0.0.0') return false;
+    return true;
+  } catch {
+    return false;
   }
-  return key;
 }
 
 export async function validateApiKey(req: NextRequest): Promise<{ valid: boolean; keyId?: string; error?: string }> {
