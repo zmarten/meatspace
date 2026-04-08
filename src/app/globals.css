@@ -2,25 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --hitl-bg: #0a0a0c;
-  --hitl-surface: #131318;
-  --hitl-surface-hover: #1a1a21;
-  --hitl-border: #25252e;
-  --hitl-border-hover: #35354a;
-  --hitl-text: #e8e6e3;
-  --hitl-text-secondary: #9a9890;
-  --hitl-text-muted: #5a5955;
-  --hitl-accent: #7c6aef;
-  --hitl-accent-soft: rgba(124, 106, 239, 0.12);
-  --hitl-approve: #34d399;
-  --hitl-approve-soft: rgba(52, 211, 153, 0.12);
-  --hitl-reject: #f87171;
-  --hitl-reject-soft: rgba(248, 113, 113, 0.12);
-  --hitl-warning: #fbbf24;
-  --hitl-warning-soft: rgba(251, 191, 36, 0.12);
+  --hitl-bg: #080b0f;
+  --hitl-surface: #0e1117;
+  --hitl-surface-hover: #141920;
+  --hitl-border: #1e2530;
+  --hitl-border-hover: #2d3748;
+  --hitl-text: #f0f2f5;
+  --hitl-text-secondary: #8892a4;
+  --hitl-text-muted: #4a5568;
+  --hitl-accent: #e8a020;
+  --hitl-accent-soft: rgba(232, 160, 32, 0.10);
+  --hitl-approve: #22c55e;
+  --hitl-approve-soft: rgba(34, 197, 94, 0.10);
+  --hitl-reject: #ef4444;
+  --hitl-reject-soft: rgba(239, 68, 68, 0.10);
+  --hitl-warning: #e8a020;
+  --hitl-warning-soft: rgba(232, 160, 32, 0.10);
 }
 
 * {
@@ -30,20 +30,20 @@
 }
 
 body {
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   background: var(--hitl-bg);
   color: var(--hitl-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Topo background pattern — subtle */
+/* Dot grid — PCB substrate pattern */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cpath d='M200 50c-80 0-150 60-150 140s70 140 150 140 150-60 150-140S280 50 200 50z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3Cpath d='M200 90c-60 0-110 45-110 100s50 100 110 100 110-45 110-100S260 90 200 90z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3Cpath d='M200 130c-40 0-70 28-70 60s30 60 70 60 70-28 70-60-30-60-70-60z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.03'/%3E%3C/svg%3E");
-  background-size: 400px 400px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='1' cy='1' r='0.75' fill='%23a8bdd4' fill-opacity='0.055'/%3E%3C/svg%3E");
+  background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
 }
@@ -63,4 +63,90 @@ body::before {
 ::selection {
   background: var(--hitl-accent-soft);
   color: var(--hitl-accent);
+}
+
+/* ─── MeatSpace brand utilities ─── */
+
+.code-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--hitl-text-muted);
+}
+
+.label-tracked {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--hitl-text-muted);
+}
+
+.label-tracked-accent {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--hitl-accent);
+}
+
+.wordmark {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hitl-text);
+}
+
+.state-decayed {
+  border-color: rgba(239, 68, 68, 0.20) !important;
+  background-color: rgba(239, 68, 68, 0.04) !important;
+}
+
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--hitl-accent);
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+.pulse-dot--approve {
+  background-color: var(--hitl-approve);
+}
+
+.badge-online {
+  background-color: var(--hitl-approve);
+  color: var(--hitl-bg);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.badge-offline {
+  background-color: var(--hitl-reject);
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }

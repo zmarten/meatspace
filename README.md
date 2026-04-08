@@ -1,121 +1,87 @@
-# HITL — Human-in-the-Loop Service
+# MeatSpace - Human-in-the-Loop for Agents
 
-**Your taste. Your judgment. On demand for any AI agent.**
+MeatSpace lets an agent escalate a subjective decision to a human by submitting content plus 2-4 choices. A human reviews the request and selects one option. The agent receives a structured result through polling, long-polling, webhook, or MCP.
 
-HITL is a REST API + dashboard that lets AI agents pause and ask a human (you) for approval, opinions, choices, and ratings before continuing. Agents submit requests, you review them in a real-time dashboard, and agents get your response via webhook or polling.
+## When to use it
 
-## Architecture
+- Use MeatSpace for subjective judgment, taste, approval, preference, or tie-breaks.
+- Use it when agent confidence is low and a wrong choice would be costly.
+- Avoid it for deterministic checks or reversible low-stakes choices.
 
-```
-┌─────────────┐     POST /api/requests     ┌──────────────┐     Realtime     ┌───────────────┐
-│   AI Agent   │ ──────────────────────────▶│  Vercel API  │ ──────────────▶ │   Dashboard   │
-│ (any framework)│                          │   Routes     │                 │  (React app)  │
-└─────────────┘                             └──────┬───────┘                 └───────┬───────┘
-       ▲                                           │                                 │
-       │         GET /api/requests/{id}/wait       │         PATCH /api/requests/{id} │
-       │◀──────────────────────────────────────────│◀────────────────────────────────┘
-       │         (long-poll or webhook)            │
-       │                                     ┌─────┴──────┐
-       └─────────────────────────────────────│  Supabase   │
-                                             │  (Postgres) │
-                                             └─────────────┘
-```
+## Core contract
 
-## Request Types
+Every request follows one pattern:
 
-| Type | What the human does | Agent gets back |
-|------|-------------------|-----------------|
-| `approve_reject` | Thumbs up/down + optional reasoning | `{decision, reasoning}` |
-| `choose_option` | Pick from agent-provided options | `{selected_option, reasoning}` |
-| `free_text` | Type whatever they want | `{text}` |
-| `rate` | 1-5 stars + optional reasoning | `{rating, reasoning}` |
-| `rank` | Order options by preference | `{ranking, reasoning}` |
+1. Agent sends `agent_name`, `title`, optional `content`, and `choices`.
+2. Human picks one of the provided choices.
+3. Agent receives `{ id, status, selected, selected_label, responded_at, expires_at }`.
 
-## Quick Start
+## Quick start
 
-### 1. Set up Supabase
-
-1. Create a new Supabase project
-2. Run the migration in `supabase/migrations/001_create_hitl_tables.sql`
-3. Copy your project URL, anon key, and service role key
-
-### 2. Deploy to Vercel
+### 1. Configure the app
 
 ```bash
-cd hitl
 npm install
-cp .env.example .env.local  # fill in your Supabase keys
+cp .env.example .env.local
 npm run dev
 ```
 
-### 3. Create an API key
-
-```bash
-curl -X POST http://localhost:3000/api/keys \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My First Agent", "agent_name": "test-agent"}'
-```
-
-Save the returned `key` — it's only shown once.
-
-### 4. Submit your first request
+### 2. Submit a request
 
 ```bash
 curl -X POST http://localhost:3000/api/requests \
-  -H "Authorization: Bearer hitl_xxxxx" \
+  -H "Authorization: Bearer $HITL_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_name": "test-agent",
-    "request_type": "approve_reject",
-    "title": "Should I ship this feature?",
-    "description": "The new onboarding flow is ready for review."
+    "agent_name": "design-agent",
+    "title": "Which homepage hero should we ship?",
+    "content": "<img src=\"https://example.com/hero-a.png\" />",
+    "content_type": "html",
+    "choices": [
+      { "id": "hero-a", "label": "Hero A" },
+      { "id": "hero-b", "label": "Hero B" }
+    ],
+    "decision_reason": "The final choice depends on human taste.",
+    "confidence": 0.42,
+    "recommended_option": "hero-b"
   }'
 ```
 
-### 5. Open the dashboard and respond
+### 3. Poll for the result
 
-Visit `http://localhost:3000` — you'll see the request in your queue.
-
-## Python SDK
-
-```python
-from hitl import HitlClient
-
-client = HitlClient(
-    api_key="hitl_xxxxx",
-    base_url="https://your-app.vercel.app"
-)
-
-# Blocks until you respond in the dashboard
-result = client.approve_or_reject(
-    title="Publish this post?",
-    agent_name="content-writer",
-)
-
-if result.decision == "approved":
-    publish()
+```bash
+curl http://localhost:3000/api/requests/REQUEST_ID
 ```
 
-See `sdk/python/hitl.py` for the full SDK.
+Example response:
 
-## API Docs
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "completed",
+    "selected": "hero-b",
+    "selected_label": "Hero B",
+    "responded_at": "2026-04-07T18:10:00.000Z",
+    "expires_at": "2026-04-07T19:00:00.000Z"
+  }
+}
+```
 
-Full documentation in `docs/API.md`.
+## Integration options
 
-## Roadmap
+- REST API: `POST /api/requests`
+- MCP: `POST /api/mcp`
+- TypeScript SDK: [`sdk/typescript/hitl.ts`](/D:/my-project/projects/hitl/sdk/typescript/hitl.ts)
+- Python SDK: [`sdk/python/hitl.py`](/D:/my-project/projects/hitl/sdk/python/hitl.py)
 
-- [ ] Supabase Auth for dashboard login
-- [ ] Push notifications (Pushover / mobile push)
-- [ ] MCP server wrapper (for Claude Code and other MCP-native agents)
-- [ ] Multi-reviewer support (marketplace mode)
-- [ ] Request templates and auto-categorization
-- [ ] Analytics dashboard with response time trends
-- [ ] Rate limiting middleware
-- [ ] TypeScript SDK
+## Discovery surfaces
 
-## Stack
-
-- **API**: Next.js API routes on Vercel
-- **Database**: Supabase (Postgres + Realtime)
-- **Dashboard**: React (Next.js)
-- **Agent SDK**: Python (requests library)
+- Docs UI: `/docs`
+- OpenAPI: `/api/openapi`
+- Agent card: `/.well-known/agent.json`
+- MCP manifest: `/.well-known/mcp.json`
+- LLM summary: `/llms.txt`
+- Full LLM docs: `/llms-full.txt`
+- Status: `/api/status`

@@ -1,288 +1,213 @@
 /**
- * HITL TypeScript SDK v2.0
- * Human-in-the-Loop Service Client
- * 
- * Features: capacity-aware retries, x402 payment info, demand voting
+ * MeatSpace TypeScript SDK
+ * Flesh-in-the-loop for autonomous agents.
+ *
+ * npm install @meatspace/sdk
+ *
+ * Usage:
+ *   import { MeatSpace } from '@meatspace/sdk';
+ *
+ *   const ms = new MeatSpace({
+ *     baseUrl: 'https://meatspace.app',
+ *     apiKey: 'hitl_...',
+ *   });
+ *
+ *   const result = await ms.ask({
+ *     agentName: 'my-agent',
+ *     title: 'Which hero image?',
+ *     content: '<img src="https://example.com/a.png"/>',
+ *     contentType: 'html',
+ *     choices: [
+ *       { id: 'a', label: 'Option A' },
+ *       { id: 'b', label: 'Option B' },
+ *     ],
+ *   });
+ *
+ *   console.log(result.selected); // 'a' or 'b'
  */
 
-interface HitlConfig {
+export interface MeatSpaceConfig {
+  /** Base URL of the MeatSpace instance */
   baseUrl: string;
-  apiKey?: string;
-  autoCheckStatus?: boolean;
-  retryOnClosed?: boolean;
-  maxRetryWaitMs?: number;
+  /** API key for authentication */
+  apiKey: string;
 }
 
-interface HitlOption {
+export interface Choice {
   id: string;
   label: string;
-  description?: string;
 }
 
-interface HitlResult {
-  requestId: string;
-  status: string;
-  decision?: 'approved' | 'rejected';
-  text?: string;
-  selectedOption?: string;
-  rating?: number;
-  ranking?: string[];
-  reasoning?: string;
-  respondedAt?: string;
-  effortTier?: string;
-  priceUsdc?: number;
-}
-
-interface ServiceStatus {
-  is_open: boolean;
-  closes_at?: string;
-  opens_at?: string;
-  pricing: any[];
-  queue: { depth: any[]; daily_remaining: number };
-  response_targets: Record<string, string>;
-  expertise: any[];
-  stats: Record<string, any>;
-}
-
-interface BaseParams {
+export interface AskParams {
+  /** Your agent/tool name (max 100 chars) */
   agentName: string;
+  /** Short title for the request (max 200 chars) */
   title: string;
-  description?: string;
-  agentContext?: string;
-  priority?: 'low' | 'normal' | 'high' | 'critical';
-  tags?: string[];
+  /** Content for human review — text, markdown, HTML, or image URL (max 50KB) */
+  content?: string;
+  /** How to render content: text, markdown, html, image (default: text) */
+  contentType?: 'text' | 'markdown' | 'html' | 'image';
+  /** 2-4 choices for the human to pick from */
+  choices: Choice[];
+  /** HTTPS webhook URL for async notification */
+  callbackUrl?: string;
+  /** Arbitrary metadata passed through to webhook (max 10KB) */
+  metadata?: Record<string, unknown>;
+  /** Why the agent is escalating this to a human */
+  decisionReason?: string;
+  /** Agent confidence between 0 and 1 */
+  confidence?: number;
+  /** Why a wrong choice would matter */
+  consequenceOfWrongChoice?: string;
+  /** Optional choice id the agent recommends */
+  recommendedOption?: string;
+  /** Optional workflow run identifier */
+  runId?: string;
+  /** Optional trace identifier */
+  traceId?: string;
+  /** Request expiry in seconds (default 3600, max 86400) */
+  timeoutSeconds?: number;
+  /** Whether to block until the human responds (default: true) */
   wait?: boolean;
-  timeoutMs?: number;
+  /** Max time to wait in ms when wait=true (default: 300000 = 5 min) */
+  waitTimeoutMs?: number;
 }
 
-interface ChooseParams extends BaseParams {
-  options: HitlOption[];
+export interface AskResult {
+  /** Request UUID */
+  requestId: string;
+  /** pending, completed, or expired */
+  status: 'pending' | 'completed' | 'expired';
+  /** The choice id the human selected (null if pending/expired) */
+  selected: string | null;
+  /** Human-readable label for the selected choice */
+  selectedLabel: string | null;
+  /** ISO timestamp of when the human responded */
+  respondedAt: string | null;
+  /** ISO timestamp of when the request expires */
+  expiresAt: string | null;
+  /** URL where the human reviews the request */
+  reviewUrl: string;
+  /** Polling endpoint */
+  pollUrl: string;
 }
 
-export class HitlServiceClosed extends Error {
-  opensAt?: string;
-  constructor(message: string, opensAt?: string) {
+export class MeatSpaceError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
-    this.name = 'HitlServiceClosed';
-    this.opensAt = opensAt;
+    this.name = 'MeatSpaceError';
+    this.status = status;
+    this.code = code;
   }
 }
 
-export class HitlQueueFull extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HitlQueueFull';
-  }
-}
-
-export class HitlClient {
+export class MeatSpace {
   private baseUrl: string;
-  private apiKey?: string;
-  private autoCheckStatus: boolean;
-  private retryOnClosed: boolean;
-  private maxRetryWaitMs: number;
   private headers: Record<string, string>;
 
-  constructor(config: HitlConfig) {
+  constructor(config: MeatSpaceConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
-    this.apiKey = config.apiKey;
-    this.autoCheckStatus = config.autoCheckStatus ?? true;
-    this.retryOnClosed = config.retryOnClosed ?? false;
-    this.maxRetryWaitMs = config.maxRetryWaitMs ?? 3600_000;
-    this.headers = { 'Content-Type': 'application/json' };
-    if (this.apiKey) this.headers['Authorization'] = `Bearer ${this.apiKey}`;
+    this.headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    };
   }
 
-  async status(): Promise<ServiceStatus> {
-    const res = await fetch(`${this.baseUrl}/api/status`);
-    return res.json();
-  }
-
-  private async checkOpen(): Promise<void> {
-    if (!this.autoCheckStatus) return;
-    const st = await this.status();
-    if (!st.is_open) {
-      throw new HitlServiceClosed(
-        st.opens_at ? `Closed. Opens at: ${st.opens_at}` : 'Service is closed',
-        st.opens_at
-      );
-    }
-  }
-
-  private async waitForOpen(): Promise<void> {
-    const deadline = Date.now() + this.maxRetryWaitMs;
-    while (Date.now() < deadline) {
-      try {
-        const st = await this.status();
-        if (st.is_open) return;
-      } catch {}
-      await new Promise(r => setTimeout(r, 30_000));
-    }
-    throw new Error('HITL service did not open within maxRetryWaitMs');
-  }
-
-  private async createRequest(body: Record<string, any>): Promise<any> {
-    try {
-      await this.checkOpen();
-    } catch (e) {
-      if (e instanceof HitlServiceClosed && this.retryOnClosed) {
-        await this.waitForOpen();
-      } else throw e;
-    }
-
+  /**
+   * Submit content and choices to a human, optionally blocking until they respond.
+   */
+  async ask(params: AskParams): Promise<AskResult> {
     const res = await fetch(`${this.baseUrl}/api/requests`, {
       method: 'POST',
       headers: this.headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        agent_name: params.agentName,
+        title: params.title,
+        content: params.content,
+        content_type: params.contentType,
+        choices: params.choices,
+        callback_url: params.callbackUrl,
+        metadata: params.metadata,
+        decision_reason: params.decisionReason,
+        confidence: params.confidence,
+        consequence_of_wrong_choice: params.consequenceOfWrongChoice,
+        recommended_option: params.recommendedOption,
+        run_id: params.runId,
+        trace_id: params.traceId,
+        timeout_seconds: params.timeoutSeconds,
+      }),
     });
 
-    if (res.status === 503) {
-      const data = await res.json();
-      if (this.retryOnClosed) {
-        await new Promise(r => setTimeout(r, 60_000));
-        return this.createRequest(body);
-      }
-      throw new HitlServiceClosed(data.message || 'Service unavailable', data.opens_at);
-    }
-
-    if (res.status === 402) {
-      const data = await res.json();
-      throw new Error(`Payment required: ${JSON.stringify(data.payment_required?.pricing)}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new MeatSpaceError(body.error || `HTTP ${res.status}`, res.status, body.code);
     }
 
     const json = await res.json();
-    if (!json.success) throw new Error(`HITL error: ${json.error}`);
-    return json.data;
+    if (!json.success) throw new MeatSpaceError(json.error, 400, json.code);
+
+    const data = json.data;
+    const result: AskResult = {
+      requestId: data.id,
+      status: 'pending',
+      selected: null,
+      selectedLabel: null,
+      respondedAt: null,
+      expiresAt: data.expires_at ?? null,
+      reviewUrl: data.review_url,
+      pollUrl: data.poll_url,
+    };
+
+    if (params.wait === false) return result;
+
+    return this.waitForResponse(data.id, params.waitTimeoutMs ?? 300_000, result);
   }
 
-  private async waitForResponse(requestId: string, timeoutMs = 300_000): Promise<HitlResult> {
+  /**
+   * Poll a request's current status (non-blocking).
+   */
+  async poll(requestId: string): Promise<AskResult> {
+    const res = await fetch(`${this.baseUrl}/api/requests/${requestId}`);
+    const json = await res.json();
+    if (!json.success) throw new MeatSpaceError(json.error || 'Not found', res.status);
+    const d = json.data;
+    return {
+      requestId: d.id,
+      status: d.status,
+      selected: d.selected,
+      selectedLabel: d.selected_label ?? null,
+      respondedAt: d.responded_at,
+      expiresAt: d.expires_at ?? null,
+      reviewUrl: `${this.baseUrl}/review/${d.id}`,
+      pollUrl: `/api/requests/${d.id}`,
+    };
+  }
+
+  private async waitForResponse(
+    requestId: string,
+    timeoutMs: number,
+    initial: AskResult,
+  ): Promise<AskResult> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const res = await fetch(
         `${this.baseUrl}/api/requests/${requestId}/wait?timeout=30000`,
-        { headers: this.headers }
       );
       const json = await res.json();
-      const data = json.data;
-      if (data.status !== 'pending') {
+      const d = json.data;
+      if (d.status !== 'pending') {
         return {
-          requestId: data.id, status: data.status,
-          decision: data.response?.decision, text: data.response?.text,
-          selectedOption: data.response?.selected_option,
-          rating: data.response?.rating, ranking: data.response?.ranking,
-          reasoning: data.response?.reasoning, respondedAt: data.responded_at,
+          ...initial,
+          status: d.status,
+          selected: d.selected,
+          selectedLabel: d.selected_label ?? null,
+          respondedAt: d.responded_at,
+          expiresAt: d.expires_at ?? initial.expiresAt,
         };
       }
     }
-    throw new Error(`No response within ${timeoutMs}ms`);
-  }
-
-  private buildResult(req: any): HitlResult {
-    return {
-      requestId: req.id, status: 'pending',
-      effortTier: req.effort_tier, priceUsdc: req.price_usdc,
-    };
-  }
-
-  async approveOrReject(params: BaseParams): Promise<HitlResult> {
-    const req = await this.createRequest({
-      agent_name: params.agentName, request_type: 'approve_reject',
-      title: params.title, description: params.description,
-      agent_context: params.agentContext, priority: params.priority || 'normal',
-      tags: params.tags || [],
-    });
-    if (params.wait === false) return this.buildResult(req);
-    return this.waitForResponse(req.id, params.timeoutMs);
-  }
-
-  async chooseOption(params: ChooseParams): Promise<HitlResult> {
-    const req = await this.createRequest({
-      agent_name: params.agentName, request_type: 'choose_option',
-      title: params.title, description: params.description,
-      agent_context: params.agentContext, options: params.options,
-      priority: params.priority || 'normal', tags: params.tags || [],
-    });
-    if (params.wait === false) return this.buildResult(req);
-    return this.waitForResponse(req.id, params.timeoutMs);
-  }
-
-  async ask(params: BaseParams): Promise<HitlResult> {
-    const req = await this.createRequest({
-      agent_name: params.agentName, request_type: 'free_text',
-      title: params.title, description: params.description,
-      agent_context: params.agentContext, priority: params.priority || 'normal',
-      tags: params.tags || [],
-    });
-    if (params.wait === false) return this.buildResult(req);
-    return this.waitForResponse(req.id, params.timeoutMs);
-  }
-
-  async rate(params: BaseParams): Promise<HitlResult> {
-    const req = await this.createRequest({
-      agent_name: params.agentName, request_type: 'rate',
-      title: params.title, description: params.description,
-      agent_context: params.agentContext, priority: params.priority || 'normal',
-    });
-    if (params.wait === false) return this.buildResult(req);
-    return this.waitForResponse(req.id, params.timeoutMs);
-  }
-
-  async rank(params: ChooseParams): Promise<HitlResult> {
-    const req = await this.createRequest({
-      agent_name: params.agentName, request_type: 'rank',
-      title: params.title, description: params.description,
-      agent_context: params.agentContext, options: params.options,
-      priority: params.priority || 'normal',
-    });
-    if (params.wait === false) return this.buildResult(req);
-    return this.waitForResponse(req.id, params.timeoutMs);
-  }
-
-  // ─── Demand voting ───
-
-  async listExpertise(): Promise<any> {
-    const res = await fetch(`${this.baseUrl}/api/expertise`);
-    const json = await res.json();
-    return json.data;
-  }
-
-  async voteExpertise(params: {
-    categorySlug: string;
-    agentName: string;
-    useCase?: string;
-    willingnessToPay?: number;
-  }): Promise<any> {
-    const res = await fetch(`${this.baseUrl}/api/expertise`, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({
-        agent_name: params.agentName,
-        category_slug: params.categorySlug,
-        use_case: params.useCase,
-        willingness_to_pay: params.willingnessToPay,
-      }),
-    });
-    return res.json();
-  }
-
-  async proposeExpertise(params: {
-    proposedName: string;
-    agentName: string;
-    proposedDescription?: string;
-    useCase?: string;
-    willingnessToPay?: number;
-  }): Promise<any> {
-    const res = await fetch(`${this.baseUrl}/api/expertise`, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({
-        agent_name: params.agentName,
-        proposed_name: params.proposedName,
-        proposed_description: params.proposedDescription,
-        use_case: params.useCase,
-        willingness_to_pay: params.willingnessToPay,
-      }),
-    });
-    return res.json();
+    return initial; // still pending after timeout
   }
 }

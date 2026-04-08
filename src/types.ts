@@ -1,127 +1,76 @@
-// HITL Service - Shared Types
+// MeatSpace HITL Service — Shared Types
 
-export type RequestType = 'approve_reject' | 'choose_option' | 'free_text' | 'rate' | 'rank';
-export type RequestStatus = 'pending' | 'in_review' | 'completed' | 'expired' | 'cancelled';
-export type Priority = 'low' | 'normal' | 'high' | 'critical';
-export type CallbackMethod = 'webhook' | 'poll';
-export type EffortTier = 'binary' | 'choice' | 'text';
-export type PaymentMethod = 'x402' | 'api_key' | 'free_tier' | 'mcp';
+// === Core Domain Types ===
 
-export interface HitlOption {
+export type RequestStatus = 'pending' | 'completed' | 'expired';
+
+export type ContentType = 'html' | 'image' | 'text' | 'markdown';
+
+export interface Choice {
   id: string;
   label: string;
-  description?: string;
 }
 
 export interface HitlRequest {
   id: string;
-  api_key_id: string | null;
   agent_name: string;
-  agent_context?: string;
-  request_type: RequestType;
   title: string;
-  description?: string;
-  payload: Record<string, any>;
-  options: HitlOption[];
-  priority: Priority;
-  tags: string[];
-  category?: string;
-  callback_method: CallbackMethod;
-  callback_url?: string;
-  timeout_seconds: number;
-  expires_at?: string;
+  content: string | null;
+  content_type: ContentType;
+  choices: Choice[];
+  callback_url: string | null;
+  metadata: Record<string, unknown>;
   status: RequestStatus;
-  response?: HitlResponse;
-  responded_at?: string;
-  response_time_ms?: number;
+  selected: string | null;
+  responded_at: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
-  // v2 fields
-  effort_tier?: EffortTier;
-  price_usdc?: number;
-  payment_method?: PaymentMethod;
-  payment_tx_hash?: string;
-  payment_verified?: boolean;
 }
 
-export interface HitlResponse {
-  decision?: 'approved' | 'rejected';
-  text?: string;
-  selected_option?: string;
-  rating?: number;
-  ranking?: string[];
-  reasoning?: string;
-}
-
-// API Request/Response types
+// === API Request/Response Types ===
 
 export interface CreateRequestBody {
   agent_name: string;
-  agent_context?: string;
-  request_type: RequestType;
   title: string;
-  description?: string;
-  payload?: Record<string, any>;
-  options?: HitlOption[];
-  priority?: Priority;
-  tags?: string[];
-  category?: string;
-  callback_method?: CallbackMethod;
+  content?: string;
+  content_type?: ContentType;
+  choices: Choice[];
   callback_url?: string;
+  metadata?: Record<string, unknown>;
+  decision_reason?: string;
+  confidence?: number;
+  consequence_of_wrong_choice?: string;
+  recommended_option?: string;
+  run_id?: string;
+  trace_id?: string;
   timeout_seconds?: number;
 }
 
 export interface SubmitResponseBody {
-  decision?: 'approved' | 'rejected';
-  text?: string;
-  selected_option?: string;
-  rating?: number;
-  ranking?: string[];
-  reasoning?: string;
+  selected_option: string;
 }
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
-// For the polling response
+export interface CreateRequestResponse {
+  id: string;
+  status: RequestStatus;
+  review_url: string;
+  poll_url: string;
+  expires_at: string;
+}
+
 export interface PollResponse {
   id: string;
   status: RequestStatus;
-  response?: HitlResponse;
-  responded_at?: string;
-}
-
-// Operating configuration types (shared across capacity, settings, config)
-
-export interface DaySchedule {
-  day: number;
-  open: string;
-  close: string;
-  enabled: boolean;
-}
-
-export interface OperatingConfig {
-  timezone: string;
-  weekly_schedule: DaySchedule[];
-  max_pending_binary: number;
-  max_pending_choice: number;
-  max_pending_text: number;
-  max_daily_requests: number;
-  force_open: boolean;
-  force_closed: boolean;
-  closed_message: string;
-  target_response_binary: number;
-  target_response_choice: number;
-  target_response_text: number;
-}
-
-export interface Pricing {
-  effort_tier: string;
-  price_usdc: number;
-  description: string;
-  max_description_chars: number;
-  max_response_chars: number;
+  selected: string | null;
+  selected_label?: string | null;
+  responded_at: string | null;
+  expires_at?: string | null;
 }

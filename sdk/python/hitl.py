@@ -1,177 +1,197 @@
 """
-HITL Python SDK — Human-in-the-Loop Service Client
-Version 2.0 — with x402 payments, capacity checks, and demand voting
+MeatSpace Python SDK
+Flesh-in-the-loop for autonomous agents.
+
+pip install meatspace
 
 Usage:
-    from hitl import HitlClient
+    from meatspace import MeatSpace
 
-    client = HitlClient(base_url="https://hitl.zachmartens.com")
-
-    # Check if the human is available
-    status = client.status()
-    if not status["is_open"]:
-        print(f"Closed. Opens at: {status['opens_at']}")
-
-    # Ask for approval (blocks until human responds)
-    result = client.approve_or_reject(
-        title="Publish this blog post?",
-        agent_name="content-writer",
+    ms = MeatSpace(
+        base_url="https://meatspace.app",
+        api_key="hitl_...",
     )
-    if result.decision == "approved":
-        publish_post()
 
-    # Vote for an expertise area you need
-    client.vote_expertise(
-        category_slug="technical-review",
-        agent_name="code-agent",
-        use_case="Need human code review before production deploy",
-        willingness_to_pay=0.50,
+    result = ms.ask(
+        agent_name="my-agent",
+        title="Which hero image?",
+        content='<img src="https://example.com/a.png"/>',
+        content_type="html",
+        choices=[
+            {"id": "a", "label": "Option A"},
+            {"id": "b", "label": "Option B"},
+        ],
     )
+
+    print(result.selected)  # 'a' or 'b'
 """
 
 import time
 import requests
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any
 
 
 @dataclass
-class HitlResponse:
-    """Response from the human reviewer."""
+class Choice:
+    """A selectable option."""
+    id: str
+    label: str
+
+
+@dataclass
+class AskResult:
+    """Result from a MeatSpace request."""
     request_id: str
-    status: str
-    decision: Optional[str] = None
-    text: Optional[str] = None
-    selected_option: Optional[str] = None
-    rating: Optional[int] = None
-    ranking: Optional[list] = None
-    reasoning: Optional[str] = None
+    status: str  # 'pending', 'completed', 'expired'
+    selected: Optional[str] = None
+    selected_label: Optional[str] = None
     responded_at: Optional[str] = None
-    effort_tier: Optional[str] = None
-    price_usdc: Optional[float] = None
-
-    @classmethod
-    def from_api(cls, data: dict) -> "HitlResponse":
-        resp = data.get("response") or {}
-        return cls(
-            request_id=data.get("id", ""),
-            status=data.get("status", "unknown"),
-            decision=resp.get("decision"),
-            text=resp.get("text"),
-            selected_option=resp.get("selected_option"),
-            rating=resp.get("rating"),
-            ranking=resp.get("ranking"),
-            reasoning=resp.get("reasoning"),
-            responded_at=data.get("responded_at"),
-        )
+    expires_at: Optional[str] = None
+    review_url: str = ""
+    poll_url: str = ""
 
 
-class HitlServiceClosed(Exception):
-    """Raised when the human reviewer is offline."""
-    def __init__(self, message: str, opens_at: str = None):
+class MeatSpaceError(Exception):
+    """Raised on API errors."""
+    def __init__(self, message: str, status: int = 0, code: Optional[str] = None):
         super().__init__(message)
-        self.opens_at = opens_at
+        self.status = status
+        self.code = code
 
 
-class HitlQueueFull(Exception):
-    """Raised when the queue is at capacity."""
-    pass
+class MeatSpace:
+    """MeatSpace API client — single method: ask()."""
 
-
-class HitlPaymentRequired(Exception):
-    """Raised when x402 payment is needed but no wallet is configured."""
-    def __init__(self, payment_info: dict):
-        self.payment_info = payment_info
-        super().__init__(f"Payment required: {payment_info.get('pricing', {}).get('amount')} USDC")
-
-
-class HitlClient:
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str = None,
-        auto_check_status: bool = True,
-        retry_on_closed: bool = False,
-        max_retry_wait: int = 3600,
-    ):
+    def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
-        self.auto_check_status = auto_check_status
-        self.retry_on_closed = retry_on_closed
-        self.max_retry_wait = max_retry_wait
         self.session = requests.Session()
-        if api_key:
-            self.session.headers["Authorization"] = f"Bearer {api_key}"
-        self.session.headers["Content-Type"] = "application/json"
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        })
 
-    def status(self) -> dict:
-        """Check service availability, pricing, queue depth."""
-        resp = self.session.get(f"{self.base_url}/api/status")
-        resp.raise_for_status()
-        return resp.json()
+    def ask(
+        self,
+        agent_name: str,
+        title: str,
+        choices: List[Dict[str, str]],
+        content: Optional[str] = None,
+        content_type: Optional[str] = None,
+        callback_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        decision_reason: Optional[str] = None,
+        confidence: Optional[float] = None,
+        consequence_of_wrong_choice: Optional[str] = None,
+        recommended_option: Optional[str] = None,
+        run_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        timeout_seconds: Optional[int] = None,
+        wait: bool = True,
+        wait_timeout: int = 300,
+    ) -> AskResult:
+        """
+        Submit content and choices to a human.
 
-    def _check_open(self):
-        """Pre-flight check before submitting."""
-        if not self.auto_check_status:
-            return
-        st = self.status()
-        if not st.get("is_open"):
-            raise HitlServiceClosed(
-                st.get("reason", "Service is closed"),
-                opens_at=st.get("opens_at"),
+        Args:
+            agent_name: Your agent/tool name (max 100 chars).
+            title: Short title for the request (max 200 chars).
+            choices: List of dicts with 'id' and 'label' keys (2-4 items).
+            content: Content for human review (max 50KB).
+            content_type: 'text', 'markdown', 'html', or 'image'.
+            callback_url: HTTPS webhook URL for async notification.
+            metadata: Arbitrary dict passed through to webhook (max 10KB).
+            decision_reason: Why the agent is escalating to a human.
+            confidence: Agent confidence between 0 and 1.
+            consequence_of_wrong_choice: Why a wrong choice would matter.
+            recommended_option: Optional choice id the agent recommends.
+            run_id: Optional workflow run identifier.
+            trace_id: Optional trace identifier.
+            timeout_seconds: Request expiry in seconds (default 3600, max 86400).
+            wait: Block until human responds (default True).
+            wait_timeout: Max seconds to wait when wait=True (default 300).
+
+        Returns:
+            AskResult with request_id, status, selected, responded_at, etc.
+        """
+        body: Dict[str, Any] = {
+            "agent_name": agent_name,
+            "title": title,
+            "choices": choices,
+        }
+        if content is not None:
+            body["content"] = content
+        if content_type is not None:
+            body["content_type"] = content_type
+        if callback_url is not None:
+            body["callback_url"] = callback_url
+        if metadata is not None:
+            body["metadata"] = metadata
+        if decision_reason is not None:
+            body["decision_reason"] = decision_reason
+        if confidence is not None:
+            body["confidence"] = confidence
+        if consequence_of_wrong_choice is not None:
+            body["consequence_of_wrong_choice"] = consequence_of_wrong_choice
+        if recommended_option is not None:
+            body["recommended_option"] = recommended_option
+        if run_id is not None:
+            body["run_id"] = run_id
+        if trace_id is not None:
+            body["trace_id"] = trace_id
+        if timeout_seconds is not None:
+            body["timeout_seconds"] = timeout_seconds
+
+        resp = self.session.post(f"{self.base_url}/api/requests", json=body)
+
+        if not resp.ok:
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            raise MeatSpaceError(
+                data.get("error", f"HTTP {resp.status_code}"),
+                resp.status_code,
+                data.get("code"),
             )
 
-    def _create_request(self, **kwargs) -> dict:
-        """Create a new HITL request with retry logic."""
-        if self.auto_check_status:
-            try:
-                self._check_open()
-            except HitlServiceClosed as e:
-                if not self.retry_on_closed:
-                    raise
-                print(f"HITL closed: {e}. Opens at: {e.opens_at}. Waiting...")
-                self._wait_for_open()
-
-        resp = self.session.post(f"{self.base_url}/api/requests", json=kwargs)
-
-        # Handle 503 (closed/capacity)
-        if resp.status_code == 503:
-            data = resp.json()
-            if self.retry_on_closed:
-                print(f"HITL unavailable: {data.get('message')}. Retrying...")
-                time.sleep(60)
-                return self._create_request(**kwargs)
-            raise HitlServiceClosed(
-                data.get("message", "Service unavailable"),
-                opens_at=data.get("opens_at"),
-            )
-
-        # Handle 402 (payment required)
-        if resp.status_code == 402:
-            data = resp.json()
-            raise HitlPaymentRequired(data.get("payment_required", {}))
-
-        resp.raise_for_status()
         data = resp.json()
         if not data.get("success"):
-            raise Exception(f"HITL error: {data.get('error')}")
-        return data["data"]
+            raise MeatSpaceError(data.get("error", "Unknown error"), code=data.get("code"))
 
-    def _wait_for_open(self):
-        """Block until the service opens."""
-        start = time.time()
-        while time.time() - start < self.max_retry_wait:
-            try:
-                st = self.status()
-                if st.get("is_open"):
-                    return
-            except Exception:
-                pass
-            time.sleep(30)
-        raise TimeoutError("HITL service did not open within max_retry_wait")
+        d = data["data"]
+        result = AskResult(
+            request_id=d["id"],
+            status="pending",
+            expires_at=d.get("expires_at"),
+            review_url=d.get("review_url", ""),
+            poll_url=d.get("poll_url", ""),
+        )
 
-    def _wait_for_response(self, request_id: str, timeout: int = 300) -> HitlResponse:
-        """Long-poll until human responds."""
+        if not wait:
+            return result
+
+        return self._wait_for_response(d["id"], wait_timeout, result)
+
+    def poll(self, request_id: str) -> AskResult:
+        """Check the current status of a request (non-blocking)."""
+        resp = self.session.get(f"{self.base_url}/api/requests/{request_id}")
+        data = resp.json()
+        if not data.get("success"):
+            raise MeatSpaceError(data.get("error", "Not found"), resp.status_code)
+        d = data["data"]
+        return AskResult(
+            request_id=d["id"],
+            status=d["status"],
+            selected=d.get("selected"),
+            selected_label=d.get("selected_label"),
+            responded_at=d.get("responded_at"),
+            expires_at=d.get("expires_at"),
+            review_url=f"{self.base_url}/review/{d['id']}",
+            poll_url=f"/api/requests/{d['id']}",
+        )
+
+    def _wait_for_response(
+        self, request_id: str, timeout: int, initial: AskResult
+    ) -> AskResult:
+        """Long-poll until the human responds or timeout."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             resp = self.session.get(
@@ -179,102 +199,16 @@ class HitlClient:
                 params={"timeout": 30000},
             )
             resp.raise_for_status()
-            data = resp.json()["data"]
-            if data["status"] != "pending":
-                return HitlResponse.from_api(data)
-        raise TimeoutError(f"No response within {timeout}s for request {request_id}")
-
-    # ─── Request methods ───
-
-    def approve_or_reject(self, title: str, agent_name: str, description: str = None,
-                          agent_context: str = None, priority: str = "normal",
-                          tags: list = None, wait: bool = True, timeout: int = 300) -> HitlResponse:
-        req = self._create_request(
-            agent_name=agent_name, request_type="approve_reject",
-            title=title, description=description, agent_context=agent_context,
-            priority=priority, tags=tags or [],
-        )
-        if wait:
-            return self._wait_for_response(req["id"], timeout)
-        return HitlResponse(request_id=req["id"], status="pending",
-                            effort_tier=req.get("effort_tier"), price_usdc=req.get("price_usdc"))
-
-    def choose_option(self, title: str, options: list, agent_name: str, description: str = None,
-                      agent_context: str = None, priority: str = "normal",
-                      wait: bool = True, timeout: int = 300) -> HitlResponse:
-        req = self._create_request(
-            agent_name=agent_name, request_type="choose_option",
-            title=title, description=description, agent_context=agent_context,
-            options=options, priority=priority,
-        )
-        if wait:
-            return self._wait_for_response(req["id"], timeout)
-        return HitlResponse(request_id=req["id"], status="pending",
-                            effort_tier=req.get("effort_tier"), price_usdc=req.get("price_usdc"))
-
-    def ask(self, title: str, agent_name: str, description: str = None,
-            agent_context: str = None, priority: str = "normal",
-            wait: bool = True, timeout: int = 300) -> HitlResponse:
-        req = self._create_request(
-            agent_name=agent_name, request_type="free_text",
-            title=title, description=description, agent_context=agent_context,
-            priority=priority,
-        )
-        if wait:
-            return self._wait_for_response(req["id"], timeout)
-        return HitlResponse(request_id=req["id"], status="pending",
-                            effort_tier=req.get("effort_tier"), price_usdc=req.get("price_usdc"))
-
-    def rate(self, title: str, agent_name: str, description: str = None,
-             agent_context: str = None, wait: bool = True, timeout: int = 300) -> HitlResponse:
-        req = self._create_request(
-            agent_name=agent_name, request_type="rate",
-            title=title, description=description, agent_context=agent_context,
-        )
-        if wait:
-            return self._wait_for_response(req["id"], timeout)
-        return HitlResponse(request_id=req["id"], status="pending")
-
-    def rank(self, title: str, options: list, agent_name: str, description: str = None,
-             wait: bool = True, timeout: int = 300) -> HitlResponse:
-        req = self._create_request(
-            agent_name=agent_name, request_type="rank",
-            title=title, description=description, options=options,
-        )
-        if wait:
-            return self._wait_for_response(req["id"], timeout)
-        return HitlResponse(request_id=req["id"], status="pending")
-
-    # ─── Demand voting ───
-
-    def list_expertise(self) -> dict:
-        """List all expertise categories and their vote counts."""
-        resp = self.session.get(f"{self.base_url}/api/expertise")
-        resp.raise_for_status()
-        return resp.json().get("data", {})
-
-    def vote_expertise(self, category_slug: str, agent_name: str,
-                       use_case: str = None, willingness_to_pay: float = None) -> dict:
-        """Vote for an existing expertise category."""
-        resp = self.session.post(f"{self.base_url}/api/expertise", json={
-            "agent_name": agent_name,
-            "category_slug": category_slug,
-            "use_case": use_case,
-            "willingness_to_pay": willingness_to_pay,
-        })
-        resp.raise_for_status()
-        return resp.json()
-
-    def propose_expertise(self, proposed_name: str, agent_name: str,
-                          proposed_description: str = None, use_case: str = None,
-                          willingness_to_pay: float = None) -> dict:
-        """Propose a new expertise category."""
-        resp = self.session.post(f"{self.base_url}/api/expertise", json={
-            "agent_name": agent_name,
-            "proposed_name": proposed_name,
-            "proposed_description": proposed_description,
-            "use_case": use_case,
-            "willingness_to_pay": willingness_to_pay,
-        })
-        resp.raise_for_status()
-        return resp.json()
+            d = resp.json()["data"]
+            if d["status"] != "pending":
+                return AskResult(
+                    request_id=initial.request_id,
+                    status=d["status"],
+                    selected=d.get("selected"),
+                    selected_label=d.get("selected_label"),
+                    responded_at=d.get("responded_at"),
+                    expires_at=d.get("expires_at", initial.expires_at),
+                    review_url=initial.review_url,
+                    poll_url=initial.poll_url,
+                )
+        return initial  # still pending

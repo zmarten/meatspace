@@ -1,17 +1,22 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { isAllowedCallbackUrl } from '@/lib/auth';
 import { deliverWebhook } from '@/lib/webhooks';
-import { SubmitResponseBody } from '@/types';
+import { getSelectedLabel, toPollResponse } from '@/lib/request-contract';
 
-// GET /api/requests/[id] - Poll request status (agent calls this)
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+// GET /api/requests/[id] — Poll request status
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
   const supabase = createServiceClient();
-  const { id } = params;
 
   const { data, error } = await supabase
     .from('hitl_requests')
-    .select('id, status, response, responded_at, expires_at')
+    .select('*')
     .eq('id', id)
     .single();
 
@@ -27,21 +32,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   return NextResponse.json({
     success: true,
-    data: {
-      id: data.id,
-      status: data.status,
-      response: data.response,
-      responded_at: data.responded_at,
-    },
+    data: toPollResponse(data),
   });
 }
 
-// PATCH /api/requests/[id] - Submit human response (dashboard calls this)
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+// PATCH /api/requests/[id] — Submit human response (called from review page, no auth)
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
   const supabase = createServiceClient();
-  const { id } = params;
 
-  // Get current request
+  // Fetch the request
   const { data: request, error: fetchError } = await supabase
     .from('hitl_requests')
     .select('*')
@@ -52,93 +55,114 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
   }
 
+  // Clock check: treat pending requests whose expiry has passed as expired
+  if (request.expires_at && new Date(request.expires_at) < new Date() && request.status === 'pending') {
+    await supabase.from('hitl_requests').update({ status: 'expired' }).eq('id', id);
+    return NextResponse.json(
+      { success: false, error: 'Request has expired', code: 'request_expired' },
+      { status: 410 }
+    );
+  }
+
   if (request.status === 'completed') {
-    return NextResponse.json({ success: false, error: 'Request already completed' }, { status: 409 });
+    return NextResponse.json(
+      { success: false, error: 'Request already completed', code: 'request_already_completed' },
+      { status: 409 }
+    );
   }
 
   if (request.status === 'expired') {
-    return NextResponse.json({ success: false, error: 'Request has expired' }, { status: 410 });
+    return NextResponse.json(
+      { success: false, error: 'Request has expired', code: 'request_expired' },
+      { status: 410 }
+    );
   }
 
+  let body: { selected_option: string };
   try {
-    const body: SubmitResponseBody = await req.json();
-
-    // Runtime validation: response must match request type
-    const rt = request.request_type;
-    if (rt === 'approve_reject') {
-      if (!body.decision || !['approved', 'rejected'].includes(body.decision)) {
-        return NextResponse.json({ success: false, error: 'decision must be "approved" or "rejected"' }, { status: 400 });
-      }
-    } else if (rt === 'rate') {
-      if (typeof body.rating !== 'number' || body.rating < 1 || body.rating > 5) {
-        return NextResponse.json({ success: false, error: 'rating must be a number between 1 and 5' }, { status: 400 });
-      }
-    } else if (rt === 'choose_option') {
-      if (!body.selected_option || typeof body.selected_option !== 'string') {
-        return NextResponse.json({ success: false, error: 'selected_option is required as a string' }, { status: 400 });
-      }
-    } else if (rt === 'free_text') {
-      if (!body.text || typeof body.text !== 'string' || body.text.trim().length === 0) {
-        return NextResponse.json({ success: false, error: 'text is required as a non-empty string' }, { status: 400 });
-      }
-    } else if (rt === 'rank') {
-      if (!Array.isArray(body.ranking)) {
-        return NextResponse.json({ success: false, error: 'ranking must be an array' }, { status: 400 });
-      }
-    }
-
-    const now = new Date();
-    const responseTimeMs = now.getTime() - new Date(request.created_at).getTime();
-
-    const { data, error } = await supabase
-      .from('hitl_requests')
-      .update({
-        status: 'completed',
-        response: body,
-        responded_at: now.toISOString(),
-        response_time_ms: responseTimeMs,
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ success: false, error: 'Failed to submit response' }, { status: 500 });
-    }
-
-    // Fire webhook if configured (with SSRF protection)
-    if (request.callback_method === 'webhook' && request.callback_url) {
-      if (!isAllowedCallbackUrl(request.callback_url)) {
-        console.warn(`Blocked webhook to disallowed URL: ${request.callback_url}`);
-      } else {
-        let keyHash = 'unsigned';
-        if (request.api_key_id) {
-          const { data: keyData } = await supabase
-            .from('hitl_api_keys')
-            .select('key_hash')
-            .eq('id', request.api_key_id)
-            .single();
-          if (keyData) keyHash = keyData.key_hash;
-        }
-        const result = await deliverWebhook({
-          url: request.callback_url,
-          payload: {
-            event: 'request.completed',
-            request_id: id,
-            response: body,
-            responded_at: now.toISOString(),
-          },
-          apiKeyHash: keyHash,
-        });
-        if (!result.success) {
-          console.error('Webhook delivery failed:', result.error);
-        }
-      }
-    }
-
-    return NextResponse.json({ success: true, data });
-
-  } catch (err) {
-    return NextResponse.json({ success: false, error: 'Invalid response body' }, { status: 400 });
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Invalid request body', code: 'invalid_request_body' },
+      { status: 400 }
+    );
   }
+
+  // Validate selected_option matches a choice
+  if (!body.selected_option || typeof body.selected_option !== 'string') {
+    return NextResponse.json(
+      { success: false, error: 'selected_option is required', code: 'selected_option_required' },
+      { status: 400 }
+    );
+  }
+
+  const validChoiceIds = (request.choices || []).map((c: { id: string }) => c.id);
+  if (!validChoiceIds.includes(body.selected_option)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `selected_option must be one of: ${validChoiceIds.join(', ')}`,
+        code: 'invalid_selected_option',
+      },
+      { status: 400 }
+    );
+  }
+
+  const selectedLabel =
+    (request.choices || []).find((choice: { id: string; label: string }) => choice.id === body.selected_option)
+      ?.label ?? null;
+
+  if (!selectedLabel) {
+    return NextResponse.json(
+      { success: false, error: 'selected_option did not resolve to a known choice', code: 'invalid_selected_option' },
+      { status: 400 }
+    );
+  }
+
+  const now = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from('hitl_requests')
+    .update({
+      status: 'completed',
+      selected: body.selected_option,
+      responded_at: now,
+    })
+    .eq('id', id);
+
+  if (updateError) {
+    return NextResponse.json(
+      { success: false, error: 'Failed to submit response', code: 'request_update_failed' },
+      { status: 500 }
+    );
+  }
+
+  // Fire webhook if configured
+  if (request.callback_url && isAllowedCallbackUrl(request.callback_url)) {
+    void deliverWebhook({
+      url: request.callback_url,
+      payload: {
+        event: 'request.completed',
+        request_id: id,
+        selected: body.selected_option,
+        selected_label: selectedLabel,
+        responded_at: now,
+        expires_at: request.expires_at,
+        metadata: request.metadata || {},
+      },
+      secret: process.env.HITL_WEBHOOK_SECRET,
+    }).catch((err) => console.error('Webhook delivery failed:', err));
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      id,
+      status: 'completed',
+      selected: body.selected_option,
+      selected_label: selectedLabel,
+      responded_at: now,
+      expires_at: request.expires_at,
+    },
+  });
 }

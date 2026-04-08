@@ -1,29 +1,28 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { validateApiKey } from '@/lib/auth';
+import { toPollResponse } from '@/lib/request-contract';
 
-// GET /api/requests/[id]/wait - Long-poll for response (agent blocks here)
-// Returns when human responds or timeout hits
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await validateApiKey(req);
-  if (!auth.valid) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
-  }
-
+// GET /api/requests/[id]/wait — Long-poll for response (agent blocks here)
+// No auth — same magic-link pattern as GET/PATCH on the request
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
   const supabase = createServiceClient();
-  const { id } = params;
   const { searchParams } = new URL(req.url);
-  const timeoutMs = parseInt(searchParams.get('timeout') || '30000'); // 30s default long-poll
-  const maxTimeout = 55000; // Under Vercel's 60s limit
-  const effectiveTimeout = Math.min(timeoutMs, maxTimeout);
+  // Cloudflare Workers wall-clock limit is 30s; cap at 25s to leave a safe margin
+  const timeoutMs = Math.min(parseInt(searchParams.get('timeout') || '25000', 10) || 25000, 25000);
 
   const startTime = Date.now();
+  let lastKnownExpiresAt: string | null = null;
 
-  // Poll loop
-  while (Date.now() - startTime < effectiveTimeout) {
+  while (Date.now() - startTime < timeoutMs) {
     const { data, error } = await supabase
       .from('hitl_requests')
-      .select('id, status, response, responded_at, expires_at')
+      .select('id, status, selected, responded_at, expires_at, choices')
       .eq('id', id)
       .single();
 
@@ -31,35 +30,43 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
     }
 
+    lastKnownExpiresAt = data.expires_at;
+
     // Check expiry
     if (data.expires_at && new Date(data.expires_at) < new Date() && data.status === 'pending') {
       await supabase.from('hitl_requests').update({ status: 'expired' }).eq('id', id);
       return NextResponse.json({
         success: true,
-        data: { id: data.id, status: 'expired', response: null },
+        data: toPollResponse({ ...data, status: 'expired', selected: null, responded_at: null }),
       });
     }
 
-    // Return if completed or terminal state
-    if (['completed', 'expired', 'cancelled'].includes(data.status)) {
+    // Return if terminal state
+    if (data.status === 'completed' || data.status === 'expired') {
       return NextResponse.json({
         success: true,
-        data: {
-          id: data.id,
-          status: data.status,
-          response: data.response,
-          responded_at: data.responded_at,
-        },
+        data: toPollResponse(data),
       });
     }
 
-    // Wait 2 seconds before next poll
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   // Timeout — tell agent to retry
   return NextResponse.json({
     success: true,
-    data: { id, status: 'pending', message: 'Still waiting. Call this endpoint again to continue waiting.' },
+    data: toPollResponse({
+      id,
+      agent_name: '',
+      title: '',
+      content: null,
+      content_type: null,
+      choices: [],
+      metadata: {},
+      status: 'pending',
+      selected: null,
+      responded_at: null,
+      expires_at: lastKnownExpiresAt,
+    }),
   }, { status: 202 });
 }

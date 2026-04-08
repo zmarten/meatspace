@@ -1,0 +1,17 @@
+{
+  "name": "@meatspace/sdk",
+  "version": "0.1.0",
+  "description": "MeatSpace SDK — flesh-in-the-loop for autonomous agents",
+  "main": "dist/hitl.js",
+  "types": "dist/hitl.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["meatspace", "hitl", "human-in-the-loop", "ai-agents", "mcp"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

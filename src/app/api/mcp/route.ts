@@ -1,237 +1,195 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { validateApiKey } from '@/lib/auth';
-import { getServiceStatus, checkCapacity, getEffortTier } from '@/lib/capacity';
-import { checkPayment } from '@/lib/payments';
 import { createHitlRequest } from '@/lib/requests';
 
+type McpToolResult = {
+  isError: boolean;
+  payload: Record<string, unknown>;
+};
+
 /**
- * MCP Server Route Handler
- * 
- * Implements the Model Context Protocol over HTTP.
- * Agents using MCP (Claude Code, Cursor, etc.) connect to this endpoint
- * and call tools like ask_human_approval, ask_human_opinion, etc.
+ * MCP Server - Streamable HTTP transport
+ *
+ * Tools:
+ *   - get_service_status
+ *   - ask_human
  */
 
-// Tool definitions matching the manifest
 const TOOLS = [
   {
-    name: 'check_hitl_status',
-    description: 'Check if the human reviewer is currently available, see pricing, queue depth, and operating hours.',
-    inputSchema: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'ask_human_approval',
-    description: 'Ask the human to approve or reject something. Binary yes/no. $0.05 USDC.',
+    name: 'get_service_status',
+    description:
+      'Check whether MeatSpace is available and when to use a human. ' +
+      'Call this when deciding whether to escalate a subjective or high-consequence choice.',
     inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'What needs approval (max 100 chars)' },
-        description: { type: 'string', description: 'Context and details (max 500 chars)' },
-        agent_context: { type: 'string', description: 'What your agent is doing' },
-        priority: { type: 'string', enum: ['low', 'normal', 'high', 'critical'] },
-      },
-      required: ['title'],
+      type: 'object' as const,
+      properties: {},
+      required: [],
     },
   },
   {
-    name: 'ask_human_choice',
-    description: 'Ask the human to choose between 2-6 options. $0.10 USDC.',
+    name: 'ask_human',
+    description:
+      'Present content to a human and ask them to choose between options. ' +
+      'Use this for subjective judgment, approval, preference, or tie-breaks. ' +
+      'Avoid using it for deterministic checks or reversible low-stakes choices. ' +
+      'The tool waits briefly for a result, then returns pending if the human has not responded yet.',
     inputSchema: {
-      type: 'object',
+      type: 'object' as const,
       properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-        options: {
+        agent_name: { type: 'string', description: 'Your agent/tool name (max 100 chars)' },
+        title: { type: 'string', description: 'Short title for the request (max 200 chars)' },
+        content: {
+          type: 'string',
+          description: 'Content for the human to review (text, markdown, HTML, or image URL). Max 50KB.',
+        },
+        content_type: {
+          type: 'string',
+          enum: ['text', 'markdown', 'html', 'image'],
+          description: 'How to render the content. Default: text',
+        },
+        choices: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
-              id: { type: 'string' },
-              label: { type: 'string' },
-              description: { type: 'string' },
+              id: { type: 'string', description: 'Unique choice identifier (max 50 chars)' },
+              label: { type: 'string', description: 'Human-readable label (max 100 chars)' },
             },
             required: ['id', 'label'],
           },
           minItems: 2,
-          maxItems: 6,
+          maxItems: 4,
+          description: '2-4 choices for the human to pick from',
         },
-        agent_context: { type: 'string' },
+        callback_url: { type: 'string', description: 'Optional HTTPS webhook URL for async notification' },
+        metadata: { type: 'object', description: 'Optional metadata passed through to webhook' },
+        decision_reason: { type: 'string', description: 'Why the agent is escalating this to a human (max 500 chars)' },
+        confidence: { type: 'number', description: 'Agent confidence between 0 and 1' },
+        consequence_of_wrong_choice: {
+          type: 'string',
+          description: 'Why a wrong choice matters (max 500 chars)',
+        },
+        recommended_option: { type: 'string', description: 'Optional choice id the agent currently recommends' },
+        run_id: { type: 'string', description: 'Optional workflow run identifier' },
+        trace_id: { type: 'string', description: 'Optional trace identifier' },
+        timeout_seconds: { type: 'number', description: 'Request expiry in seconds (default 3600, max 86400)' },
       },
-      required: ['title', 'options'],
-    },
-  },
-  {
-    name: 'ask_human_opinion',
-    description: 'Ask for free-text opinion, taste, or strategic input. $0.25 USDC.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        description: { type: 'string', description: 'Full context (max 2000 chars)' },
-        agent_context: { type: 'string' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'ask_human_rating',
-    description: 'Ask the human to rate something 1-5 stars. $0.05 USDC.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    name: 'vote_expertise',
-    description: 'Vote for an expertise area or propose a new one.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        category_slug: { type: 'string' },
-        proposed_name: { type: 'string' },
-        proposed_description: { type: 'string' },
-        use_case: { type: 'string' },
-        willingness_to_pay: { type: 'number' },
-      },
+      required: ['agent_name', 'title', 'choices'],
     },
   },
 ];
 
-// Map MCP tool names to request types
-const TOOL_TO_REQUEST_TYPE: Record<string, string> = {
-  ask_human_approval: 'approve_reject',
-  ask_human_choice: 'choose_option',
-  ask_human_opinion: 'free_text',
-  ask_human_rating: 'rate',
-};
+async function handleGetServiceStatus(): Promise<McpToolResult> {
+  return {
+    isError: false,
+    payload: {
+      service: 'meatspace',
+      status: 'operational',
+      capabilities: {
+        interaction_model: 'content_plus_choices',
+        min_choices: 2,
+        max_choices: 4,
+        content_types: ['text', 'markdown', 'html', 'image'],
+        response_modes: ['poll', 'long_poll', 'webhook', 'mcp'],
+      },
+      agent_guidance: {
+        use_when: [
+          'The task needs subjective human judgment or taste',
+          'A human approval, preference, or tie-break is required',
+          'The agent has low confidence and a wrong choice would be costly',
+        ],
+        avoid_when: [
+          'The task is deterministic or can be validated automatically',
+          'The choice is reversible and low stakes',
+        ],
+      },
+    },
+  };
+}
 
-async function handleToolCall(toolName: string, args: Record<string, any>) {
-  // Status check
-  if (toolName === 'check_hitl_status') {
-    return await getServiceStatus();
-  }
+async function handleAskHuman(args: Record<string, unknown>): Promise<McpToolResult> {
+  const result = await createHitlRequest({
+    body: {
+      agent_name: (args.agent_name as string) || 'mcp-agent',
+      title: args.title as string,
+      content: args.content as string | undefined,
+      content_type: args.content_type as 'text' | 'markdown' | 'html' | 'image' | undefined,
+      choices: args.choices as { id: string; label: string }[],
+      callback_url: args.callback_url as string | undefined,
+      metadata: args.metadata as Record<string, unknown> | undefined,
+      decision_reason: args.decision_reason as string | undefined,
+      confidence: args.confidence as number | undefined,
+      consequence_of_wrong_choice: args.consequence_of_wrong_choice as string | undefined,
+      recommended_option: args.recommended_option as string | undefined,
+      run_id: args.run_id as string | undefined,
+      trace_id: args.trace_id as string | undefined,
+      timeout_seconds: args.timeout_seconds as number | undefined,
+    },
+  });
 
-  // Vote for expertise
-  if (toolName === 'vote_expertise') {
-    const supabase = createServiceClient();
-
-    if (args.category_slug) {
-      const { data: category } = await supabase
-        .from('hitl_expertise_categories')
-        .select('id')
-        .eq('slug', args.category_slug)
-        .single();
-
-      if (!category) return { error: `Category '${args.category_slug}' not found` };
-
-      await supabase.from('hitl_expertise_votes').upsert(
-        {
-          category_id: category.id,
-          agent_name: args.agent_name || 'mcp-agent',
-          use_case: args.use_case,
-          willingness_to_pay: args.willingness_to_pay,
-        },
-        { onConflict: 'category_id,agent_name' }
-      );
-
-      return { success: true, message: `Vote recorded for '${args.category_slug}'` };
-    }
-
-    if (args.proposed_name) {
-      await supabase.from('hitl_expertise_proposals').insert({
-        agent_name: args.agent_name || 'mcp-agent',
-        proposed_name: args.proposed_name,
-        proposed_description: args.proposed_description,
-        use_case: args.use_case,
-        willingness_to_pay: args.willingness_to_pay,
-      });
-
-      return { success: true, message: `Proposed '${args.proposed_name}'` };
-    }
-
-    return { error: 'Provide category_slug or proposed_name' };
-  }
-
-  // HITL request tools
-  const requestType = TOOL_TO_REQUEST_TYPE[toolName];
-  if (!requestType) return { error: `Unknown tool: ${toolName}` };
-
-  const effortTier = getEffortTier(requestType);
-
-  // Check capacity
-  const capacity = await checkCapacity(effortTier);
-  if (!capacity.is_open) {
+  if ('error' in result) {
     return {
-      error: 'service_unavailable',
-      message: capacity.reason,
-      opens_at: capacity.opens_at,
+      isError: true,
+      payload: {
+        error: result.error,
+        code: result.code,
+      },
     };
   }
 
-  // Create request (MCP requests use api_key auth, no x402 in MCP flow)
-  const result = await createHitlRequest({
-    body: {
-      agent_name: args.agent_name || 'mcp-agent',
-      agent_context: args.agent_context,
-      request_type: requestType as any,
-      title: args.title,
-      description: args.description,
-      options: args.options || [],
-      priority: args.priority || 'normal',
-      tags: ['mcp'],
-      callback_method: 'poll',
-      timeout_seconds: 3600,
-    },
-    paymentMethod: 'mcp',
-  });
-
-  if ('error' in result) return { error: result.error };
-  const data = result.data;
-
+  const { id } = result.data;
   const supabase = createServiceClient();
 
-  // Long-poll for response (block up to 50 seconds for MCP)
+  // Long-poll for up to 50s (under Vercel's 60s limit)
   const deadline = Date.now() + 50000;
   while (Date.now() < deadline) {
     const { data: check } = await supabase
       .from('hitl_requests')
-      .select('status, response, responded_at')
-      .eq('id', data.id)
+      .select('status, selected, responded_at, expires_at, choices')
+      .eq('id', id)
       .single();
 
-    if (check && ['completed', 'expired', 'cancelled'].includes(check.status)) {
+    if (check && (check.status === 'completed' || check.status === 'expired')) {
       return {
-        request_id: data.id,
-        status: check.status,
-        response: check.response,
-        responded_at: check.responded_at,
+        isError: false,
+        payload: {
+          request_id: id,
+          status: check.status,
+          selected: check.selected,
+          selected_label: check.selected
+            ? (check.choices || []).find((choice: { id: string; label: string }) => choice.id === check.selected)?.label ?? null
+            : null,
+          responded_at: check.responded_at,
+          expires_at: check.expires_at,
+        },
       };
     }
 
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
-  // Timed out waiting — return pending with poll URL
   return {
-    request_id: data.id,
-    status: 'pending',
-    message: 'Human has not yet responded. Poll /api/requests/' + data.id + ' for updates.',
-    estimated_response_seconds: capacity.estimated_response_seconds[effortTier as keyof typeof capacity.estimated_response_seconds],
+    isError: false,
+    payload: {
+      request_id: id,
+      status: 'pending',
+      message: `Human has not yet responded. Poll /api/requests/${id} for updates.`,
+      review_url: result.data.review_url,
+      poll_url: result.data.poll_url,
+      expires_at: result.data.expires_at,
+    },
   };
 }
 
-// MCP protocol handler
 export async function POST(req: NextRequest) {
-  // Require API key authentication
-  const auth = await validateApiKey(req);
-  if (!auth.valid) {
+  const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!bearerToken || !validateApiKey(bearerToken)) {
     return NextResponse.json(
-      { jsonrpc: '2.0', error: { code: -32000, message: auth.error || 'Unauthorized: valid API key required' } },
+      { jsonrpc: '2.0', error: { code: -32000, message: 'Unauthorized: valid API key required' } },
       { status: 401 }
     );
   }
@@ -240,7 +198,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { method, params, id } = body;
 
-    // JSON-RPC style MCP messages
     switch (method) {
       case 'initialize':
         return NextResponse.json({
@@ -249,10 +206,7 @@ export async function POST(req: NextRequest) {
           result: {
             protocolVersion: '2024-11-05',
             capabilities: { tools: {} },
-            serverInfo: {
-              name: 'hitl',
-              version: '1.0.0',
-            },
+            serverInfo: { name: 'meatspace', version: '0.1.0' },
           },
         });
 
@@ -264,52 +218,43 @@ export async function POST(req: NextRequest) {
         });
 
       case 'tools/call': {
-        const { name, arguments: args } = params;
-        const result = await handleToolCall(name, args || {});
-        return NextResponse.json({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              { type: 'text', text: JSON.stringify(result, null, 2) },
-            ],
-          },
-        });
-      }
-
-      case 'resources/list':
-        return NextResponse.json({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            resources: [
-              {
-                uri: 'hitl://docs',
-                name: 'HITL Documentation',
-                description: 'Full API documentation',
-                mimeType: 'text/plain',
-              },
-            ],
-          },
-        });
-
-      case 'resources/read':
-        if (params?.uri === 'hitl://docs') {
-          const response = await fetch(new URL('/llms-full.txt', req.url));
-          const text = await response.text();
+        if (params === null || typeof params !== 'object') {
           return NextResponse.json({
             jsonrpc: '2.0',
             id,
-            result: {
-              contents: [{ uri: 'hitl://docs', mimeType: 'text/plain', text }],
-            },
+            error: { code: -32602, message: 'Invalid params' },
           });
         }
+        const { name, arguments: args } = params;
+        if (args !== undefined && args !== null && typeof args !== 'object') {
+          return NextResponse.json({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32602, message: 'Invalid params' },
+          });
+        }
+        if (!['ask_human', 'get_service_status'].includes(name)) {
+          return NextResponse.json({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32602, message: `Unknown tool: ${name}` },
+          });
+        }
+
+        const result = name === 'get_service_status'
+          ? await handleGetServiceStatus()
+          : await handleAskHuman(args || {});
+
         return NextResponse.json({
           jsonrpc: '2.0',
           id,
-          error: { code: -32602, message: 'Resource not found' },
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(result.payload, null, 2) }],
+            structuredContent: result.payload,
+            isError: result.isError,
+          },
         });
+      }
 
       default:
         return NextResponse.json({
@@ -327,7 +272,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Allow CORS for MCP clients
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,

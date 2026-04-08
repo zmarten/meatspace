@@ -1,95 +1,52 @@
 {
-  "name": "HITL — Human-in-the-Loop",
-  "description": "Human taste, judgment, and opinion as a service for AI agents. Submit requests for approval, option selection, or free-text opinions from a real human expert.",
-  "url": "https://hitl.zachmartens.com",
-  "version": "1.0.0",
+  "name": "MeatSpace",
+  "description": "Flesh-in-the-loop service for agents. Submit content plus 2-4 choices, receive one human-selected option.",
+  "url": "https://meatspace.app",
+  "version": "0.1.0",
   "provider": {
-    "name": "Zach Martens",
-    "url": "https://zachmartens.com"
+    "name": "MeatSpace",
+    "url": "https://meatspace.app"
   },
   "capabilities": {
-    "request_types": [
-      {
-        "type": "approve_reject",
-        "description": "Binary yes/no decision with optional reasoning",
-        "effort_tier": "binary",
-        "price_usdc": 0.05,
-        "estimated_response_seconds": 300
-      },
-      {
-        "type": "choose_option",
-        "description": "Select from 2-6 options with reasoning",
-        "effort_tier": "choice",
-        "price_usdc": 0.10,
-        "estimated_response_seconds": 600
-      },
-      {
-        "type": "free_text",
-        "description": "Open-ended human opinion, taste, or strategic input",
-        "effort_tier": "text",
-        "price_usdc": 0.25,
-        "estimated_response_seconds": 900
-      },
-      {
-        "type": "rate",
-        "description": "1-5 star rating with optional reasoning",
-        "effort_tier": "binary",
-        "price_usdc": 0.05,
-        "estimated_response_seconds": 300
-      },
-      {
-        "type": "rank",
-        "description": "Order options by preference",
-        "effort_tier": "choice",
-        "price_usdc": 0.15,
-        "estimated_response_seconds": 600
-      }
+    "interaction_model": "content_plus_choices",
+    "content_types": ["text", "markdown", "html", "image"],
+    "min_choices": 2,
+    "max_choices": 4,
+    "authentication": ["bearer_token"],
+    "response_modes": ["poll", "long_poll", "webhook", "mcp"]
+  },
+  "agent_guidance": {
+    "use_when": [
+      "The task needs subjective human judgment or taste",
+      "A human approval, preference, or tie-break is required",
+      "The agent has low confidence and a wrong choice would be costly"
     ],
-    "expertise_areas": [
-      "product-taste",
-      "content-voice",
-      "outdoor-rec"
-    ],
-    "payment_protocols": ["x402"],
-    "payment_networks": ["eip155:8453"],
-    "payment_assets": ["USDC"],
-    "authentication": ["x402", "bearer_token"],
-    "response_modes": ["poll", "long_poll", "webhook"]
+    "avoid_when": [
+      "The task is deterministic or can be validated automatically",
+      "The choice is reversible and low stakes"
+    ]
   },
   "endpoints": {
     "status": "/api/status",
     "requests": "/api/requests",
-    "expertise": "/api/expertise",
+    "mcp": "/api/mcp",
+    "openapi": "/api/openapi",
     "documentation": "/llms-full.txt"
   },
-  "operating_hours": {
-    "timezone": "America/Denver",
-    "schedule": {
-      "monday": "07:00-19:00",
-      "tuesday": "07:00-19:00",
-      "wednesday": "07:00-19:00",
-      "thursday": "07:00-19:00",
-      "friday": "07:00-19:00",
-      "saturday": "09:00-15:00",
-      "sunday": "closed"
-    }
-  },
-  "limits": {
-    "max_pending_binary": 20,
-    "max_pending_choice": 10,
-    "max_pending_text": 5,
-    "max_daily_requests": 50,
-    "max_options": 6
+  "result_shape": {
+    "id": "uuid",
+    "status": "pending|completed|expired",
+    "selected": "choice-id|null",
+    "selected_label": "choice-label|null",
+    "responded_at": "iso-8601|null",
+    "expires_at": "iso-8601|null"
   },
   "tags": [
     "human-in-the-loop",
-    "taste",
-    "judgment",
-    "opinion",
+    "agents",
+    "subjective-judgment",
     "approval",
-    "review",
-    "product-design",
-    "content",
-    "outdoor-recreation"
+    "preference",
+    "mcp"
   ]
 }

@@ -1,92 +1,69 @@
-# HITL API Documentation
+# MeatSpace API Documentation
 
-**Base URL**: `https://your-domain.vercel.app/api`
+**Base URL**: `https://meatspace.app/api`
 
 ## Authentication
 
-All agent-facing endpoints require a Bearer token:
+Agent-facing request creation and MCP access require:
 
+```text
+Authorization: Bearer YOUR_API_KEY
 ```
-Authorization: Bearer hitl_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
 
-Get your API key from the dashboard under **Settings > API Keys**.
+## Agent guidance
 
----
+- Use MeatSpace for subjective judgment, taste, approval, preference, or tie-breaks.
+- Use it when confidence is low and a wrong choice would be costly.
+- Avoid it for deterministic checks or reversible low-stakes choices.
+- Prefer 2-4 mutually exclusive options and include only the context needed for a fast decision.
 
 ## Endpoints
 
-### 1. Create a Request
+### 1. Create a request
 
 **POST** `/api/requests`
 
-Submit a new human-in-the-loop request.
+#### Request body
 
-#### Request Body
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_name` | string | Yes | Your agent or tool name |
+| `title` | string | Yes | Short title shown to the human |
+| `choices` | array | Yes | 2-4 objects with `id` and `label` |
+| `content` | string | No | Content for human review |
+| `content_type` | enum | No | `text`, `markdown`, `html`, `image` |
+| `decision_reason` | string | No | Why the agent is escalating |
+| `confidence` | number | No | Agent confidence between 0 and 1 |
+| `consequence_of_wrong_choice` | string | No | Why a wrong choice matters |
+| `recommended_option` | string | No | Optional choice id the agent recommends |
+| `run_id` | string | No | Optional workflow run id |
+| `trace_id` | string | No | Optional trace id |
+| `callback_url` | string | No | Public HTTPS webhook URL |
+| `metadata` | object | No | Arbitrary metadata echoed back in the webhook |
+| `timeout_seconds` | integer | No | Expiry in seconds, max 86400 |
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `agent_name` | string | ✅ | — | Your agent's name |
-| `request_type` | enum | ✅ | — | `approve_reject`, `choose_option`, `free_text`, `rate`, `rank` |
-| `title` | string | ✅ | — | Short title shown to the human |
-| `description` | string | — | — | Detailed context |
-| `agent_context` | string | — | — | What your agent is doing (shown to reviewer) |
-| `payload` | object | — | `{}` | Arbitrary data to display |
-| `options` | array | ✅* | `[]` | Required for `choose_option` and `rank`. Array of `{id, label, description}` |
-| `priority` | enum | — | `normal` | `low`, `normal`, `high`, `critical` |
-| `tags` | string[] | — | `[]` | Tags for filtering |
-| `category` | string | — | — | Category label |
-| `callback_method` | enum | — | `poll` | `poll` or `webhook` |
-| `callback_url` | string | ✅** | — | **Required if `callback_method` is `webhook`** |
-| `timeout_seconds` | integer | — | `3600` | Auto-expire after this many seconds |
+#### Example
 
-#### Example: Approve/Reject
-
-```bash
-curl -X POST https://your-domain.vercel.app/api/requests \
-  -H "Authorization: Bearer hitl_xxxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_name": "content-writer",
-    "request_type": "approve_reject",
-    "title": "Publish blog post: AI Trends 2026?",
-    "description": "Draft is 1,200 words covering transformer architecture evolution...",
-    "priority": "high",
-    "agent_context": "Writing pipeline ready to publish to WordPress"
-  }'
-```
-
-#### Example: Choose Option
-
-```bash
-curl -X POST https://your-domain.vercel.app/api/requests \
-  -H "Authorization: Bearer hitl_xxxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_name": "design-agent",
-    "request_type": "choose_option",
-    "title": "Pick a color palette for the landing page",
-    "options": [
-      {"id": "warm", "label": "Warm Sunset", "description": "Orange, coral, cream"},
-      {"id": "cool", "label": "Cool Nordic", "description": "Slate, ice blue, white"},
-      {"id": "bold", "label": "Bold Contrast", "description": "Black, electric yellow, white"}
-    ]
-  }'
-```
-
-#### Example: Free Text
-
-```bash
-curl -X POST https://your-domain.vercel.app/api/requests \
-  -H "Authorization: Bearer hitl_xxxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_name": "research-agent",
-    "request_type": "free_text",
-    "title": "What angle should this market analysis take?",
-    "description": "Researching Montana real estate trends. Need your opinion on framing.",
-    "agent_context": "Building a competitive analysis report for Q3 review"
-  }'
+```json
+{
+  "agent_name": "design-agent",
+  "title": "Which homepage hero should we ship?",
+  "content": "<img src=\"https://example.com/hero-a.png\" />",
+  "content_type": "html",
+  "choices": [
+    { "id": "hero-a", "label": "Hero A" },
+    { "id": "hero-b", "label": "Hero B" }
+  ],
+  "decision_reason": "The final choice depends on human taste.",
+  "confidence": 0.42,
+  "consequence_of_wrong_choice": "Choosing the weaker hero will hurt launch conversion.",
+  "recommended_option": "hero-b",
+  "run_id": "run_123",
+  "trace_id": "trace_456",
+  "callback_url": "https://example.com/webhooks/meatspace",
+  "metadata": { "campaign": "spring-launch" },
+  "timeout_seconds": 3600
+}
 ```
 
 #### Response
@@ -95,124 +72,79 @@ curl -X POST https://your-domain.vercel.app/api/requests \
 {
   "success": true,
   "data": {
-    "id": "uuid-here",
+    "id": "uuid",
     "status": "pending",
-    "expires_at": "2026-04-02T12:00:00Z",
-    "poll_url": "/api/requests/uuid-here"
+    "review_url": "https://meatspace.app/review/uuid",
+    "poll_url": "/api/requests/uuid",
+    "expires_at": "2026-04-07T19:00:00.000Z"
   }
 }
 ```
 
----
-
-### 2. Poll for Response (Async)
+### 2. Poll for response
 
 **GET** `/api/requests/{id}`
 
-Check if the human has responded.
+Returns a minimal status payload for agent polling.
 
-```bash
-curl https://your-domain.vercel.app/api/requests/{id} \
-  -H "Authorization: Bearer hitl_xxxxx"
-```
-
-#### Response (Pending)
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "status": "pending",
-    "response": null
-  }
-}
-```
-
-#### Response (Completed)
 ```json
 {
   "success": true,
   "data": {
     "id": "uuid",
     "status": "completed",
-    "response": {
-      "decision": "approved",
-      "reasoning": "Looks good, but tone down the intro paragraph."
-    },
-    "responded_at": "2026-04-01T15:30:00Z"
+    "selected": "hero-b",
+    "selected_label": "Hero B",
+    "responded_at": "2026-04-07T18:10:00.000Z",
+    "expires_at": "2026-04-07T19:00:00.000Z"
   }
 }
 ```
 
----
-
-### 3. Wait for Response (Synchronous / Long-Poll)
+### 3. Wait for response
 
 **GET** `/api/requests/{id}/wait?timeout=30000`
 
-Block until the human responds or timeout is reached. Agent keeps calling this in a loop.
+Blocks until the human responds or timeout is reached. Returns HTTP `202` while still pending.
 
-| Param | Type | Default | Max | Description |
-|-------|------|---------|-----|-------------|
-| `timeout` | integer (ms) | 30000 | 55000 | How long to wait before returning |
+### 4. Webhook callback
 
-```bash
-# Agent loop pattern:
-while true; do
-  RESULT=$(curl -s "https://your-domain.vercel.app/api/requests/{id}/wait?timeout=30000" \
-    -H "Authorization: Bearer hitl_xxxxx")
-  STATUS=$(echo $RESULT | jq -r '.data.status')
-  if [ "$STATUS" != "pending" ]; then
-    echo "Got response: $RESULT"
-    break
-  fi
-done
-```
-
----
-
-### 4. Webhook Callback
-
-If `callback_method` is `webhook`, we'll POST to your `callback_url` when the human responds:
+If `callback_url` is set, MeatSpace POSTs:
 
 ```json
 {
   "event": "request.completed",
   "request_id": "uuid",
-  "response": {
-    "decision": "approved",
-    "reasoning": "Ship it."
-  },
-  "responded_at": "2026-04-01T15:30:00Z"
+  "selected": "hero-b",
+  "selected_label": "Hero B",
+  "responded_at": "2026-04-07T18:10:00.000Z",
+  "expires_at": "2026-04-07T19:00:00.000Z",
+  "metadata": { "campaign": "spring-launch" }
 }
 ```
 
----
+Headers:
 
-## Response Shapes by Request Type
+- `X-HITL-Timestamp`
+- `X-HITL-Signature`
 
-| Type | Response Fields |
-|------|----------------|
-| `approve_reject` | `decision` ("approved" / "rejected"), optional `reasoning` |
-| `choose_option` | `selected_option` (option id), optional `reasoning` |
-| `free_text` | `text` |
-| `rate` | `rating` (1-5), optional `reasoning` |
-| `rank` | `ranking` (ordered array of option ids), optional `reasoning` |
+### 5. MCP
 
----
+**POST** `/api/mcp`
 
-## Rate Limits
+Tools:
 
-- 30 requests per minute per API key (configurable)
-- Long-poll connections limited to 55 seconds (Vercel edge limit)
+- `get_service_status`
+- `ask_human`
 
-## Error Codes
+## Error format
 
-| Status | Meaning |
-|--------|---------|
-| 401 | Invalid or missing API key |
-| 400 | Bad request / validation error |
-| 404 | Request not found |
-| 409 | Request already completed |
-| 410 | Request expired |
-| 500 | Server error |
+Validation and lifecycle errors return:
+
+```json
+{
+  "success": false,
+  "error": "choices must be an array of 2-4 items",
+  "code": "invalid_choice_count"
+}
+```

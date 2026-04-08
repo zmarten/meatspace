@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const PROTECTED_ROUTES = [
-  { path: '/api/keys', methods: ['GET', 'POST'] },
-  { path: '/api/config', methods: ['PATCH'] },
-  { path: '/api/stats', methods: ['GET'] },
-];
+import { validateApiKey } from '@/lib/auth';
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method;
 
-  // Protect admin endpoints
-  const isProtected =
-    PROTECTED_ROUTES.some(r => pathname.startsWith(r.path) && r.methods.includes(method)) ||
-    (pathname.match(/^\/api\/requests\/[^/]+$/) && method === 'PATCH');
+  // POST /api/requests — agent creates a request (Bearer token)
+  if (pathname === '/api/requests' && method === 'POST') {
+    const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
+    if (!bearerToken || !validateApiKey(bearerToken)) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: valid Bearer token required' },
+        { status: 401 }
+      );
+    }
+  }
 
-  if (isProtected) {
+  // GET /api/requests — list all requests (admin secret)
+  if (pathname === '/api/requests' && method === 'GET') {
     const secret = req.headers.get('x-admin-secret');
     if (!secret || secret !== process.env.HITL_ADMIN_SECRET) {
       return NextResponse.json(
@@ -25,9 +27,13 @@ export function middleware(req: NextRequest) {
     }
   }
 
+  // POST /api/mcp — MCP tool calls (auth handled in route itself)
+  // GET/PATCH /api/requests/[id] — no auth (magic link pattern)
+  // GET /api/requests/[id]/wait — no auth
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/api/keys/:path*', '/api/config/:path*', '/api/stats/:path*', '/api/requests/:path*'],
+  matcher: ['/api/requests/:path*', '/api/mcp/:path*'],
 };

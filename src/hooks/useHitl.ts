@@ -1,33 +1,41 @@
 'use client';
 
-import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { HitlRequest, RequestStatus } from '@/types';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const isMockMode =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.startsWith('mock-') ||
+  process.env.USE_MOCK === 'true';
+
+let supabase: any = null;
+function getSupabase() {
+  if (!supabase && !isMockMode) {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return supabase;
+}
 
 export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   const [requests, setRequests] = useState<HitlRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<any>(null);
 
   const fetchRequests = useCallback(async () => {
-    let query = supabase
-      .from('hitl_requests')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (statusFilter !== 'all') {
-      query = query.eq('status', statusFilter);
-    }
-
-    const { data, error } = await query;
-    if (!error && data) {
-      setRequests(data as HitlRequest[]);
+    try {
+      const params = new URLSearchParams({ status: statusFilter, limit: '100' });
+      const res = await globalThis.fetch(`/api/requests?${params}`, {
+        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '' },
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setRequests(json.data as HitlRequest[]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch requests:', err);
     }
     setLoading(false);
   }, [statusFilter]);
@@ -35,27 +43,24 @@ export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   useEffect(() => {
     fetchRequests();
 
-    // Subscribe to realtime changes (filter server-side when possible)
-    const channelName = statusFilter === 'all' ? 'hitl-requests' : `hitl-requests-${statusFilter}`;
-    const filter = statusFilter !== 'all' ? `status=eq.${statusFilter}` : undefined;
-    channelRef.current = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'hitl_requests', ...(filter ? { filter } : {}) },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setRequests(prev => [payload.new as HitlRequest, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            setRequests(prev =>
-              prev.map(r => r.id === (payload.new as HitlRequest).id ? payload.new as HitlRequest : r)
-            );
-          } else if (payload.eventType === 'DELETE') {
-            setRequests(prev => prev.filter(r => r.id !== (payload.old as any).id));
-          }
-        }
-      )
-      .subscribe();
+    if (isMockMode) {
+      const interval = setInterval(fetchRequests, 3000);
+      return () => clearInterval(interval);
+    }
+
+    const client = getSupabase();
+    if (client) {
+      const channelName = statusFilter === 'all' ? 'hitl-requests' : `hitl-requests-${statusFilter}`;
+      const filter = statusFilter !== 'all' ? `status=eq.${statusFilter}` : undefined;
+      channelRef.current = client
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'hitl_requests', ...(filter ? { filter } : {}) },
+          () => fetchRequests()
+        )
+        .subscribe();
+    }
 
     return () => {
       channelRef.current?.unsubscribe();
@@ -65,48 +70,11 @@ export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   return { requests, loading, refetch: fetchRequests };
 }
 
-export function useStats() {
-  const [stats, setStats] = useState({
-    pending_count: 0,
-    completed_count: 0,
-    expired_count: 0,
-    last_24h_count: 0,
-    avg_response_time_ms: 0,
-    unique_agents: 0,
-    total_revenue_usdc: 0,
-    revenue_24h_usdc: 0,
-    pending_binary: 0,
-    pending_choice: 0,
-    pending_text: 0,
-    daily_request_count: 0,
-    top_expertise_demand: [] as any[],
-    pending_proposals: [] as any[],
-  });
-
-  useEffect(() => {
-    async function fetch() {
-      const res = await globalThis.fetch('/api/stats', {
-        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '' },
-      });
-      const json = await res.json();
-      if (json.success) setStats(json.data);
-    }
-    fetch();
-    const interval = setInterval(fetch, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return stats;
-}
-
-export async function submitResponse(id: string, response: Record<string, any>) {
+export async function submitResponse(id: string, selectedOption: string) {
   const res = await fetch(`/api/requests/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '',
-    },
-    body: JSON.stringify(response),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected_option: selectedOption }),
   });
   return res.json();
 }

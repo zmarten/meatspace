@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meatspace"
+version = "0.1.0"
+description = "MeatSpace SDK — flesh-in-the-loop for autonomous agents"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["meatspace", "hitl", "human-in-the-loop", "ai-agents", "mcp"]
+dependencies = ["requests>=2.28"]
+
+[project.urls]
+Homepage = "https://meatspace.app"
+Documentation = "https://meatspace.app/docs"
