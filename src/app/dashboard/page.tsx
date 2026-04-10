@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useState } from 'react';
 import { HitlRequest, RequestStatus } from '@/types';
 import { useRequests, submitResponse } from '@/hooks/useHitl';
