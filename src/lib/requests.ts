@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+// crypto.randomUUID() is a Web Crypto global — no import needed in Edge runtime
 import { createServiceClient } from './supabase';
 import { isAllowedCallbackUrl } from './auth';
 import { sendNotification } from './notifications';
@@ -111,7 +111,7 @@ export async function createHitlRequest(params: {
   }
 
   const timeoutSeconds = Math.min(body.timeout_seconds || 3600, 86400);
-  const id = randomUUID();
+  const id = crypto.randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + timeoutSeconds * 1000).toISOString();
 

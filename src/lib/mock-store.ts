@@ -4,10 +4,11 @@
  * Resets every time the dev server restarts.
  */
 
-import { randomUUID, createHash } from 'crypto';
+// Web Crypto globals used — no Node.js crypto import needed in Edge runtime
 
 function hashApiKey(key: string): string {
-  return createHash('sha256').update(key).digest('hex');
+  // Mock-mode only — not security sensitive, btoa is sufficient
+  return btoa(key);
 }
 
 // ─── Types for internal rows ───
@@ -49,7 +50,7 @@ function seed() {
 
   store.hitl_requests = [
     {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       agent_name: 'design-agent',
       title: 'Which hero layout for the landing page?',
       content: '<h2>Campaign Landing Page</h2><p>Three layout variants for the Q2 campaign. Each uses the same copy but different visual hierarchies.</p>',
@@ -69,7 +70,7 @@ function seed() {
       updated_at: fiveMinAgo,
     },
     {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       agent_name: 'content-writer',
       title: 'Which tagline should we use?',
       content: 'We need a tagline for the product launch email. The audience is technical founders.',
@@ -91,7 +92,7 @@ function seed() {
     },
     // One completed request
     {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       agent_name: 'deploy-bot',
       title: 'Which deployment strategy?',
       content: 'Release v2.3.0 is ready. Choose the rollout strategy.',
@@ -128,7 +129,7 @@ export function getTable(tableName: string): DbRow[] {
 export function insertRow(tableName: string, row: DbRow): DbRow {
   const table = getTable(tableName);
   const newRow = {
-    id: row.id || randomUUID(),
+    id: row.id || crypto.randomUUID(),
     ...row,
     created_at: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || new Date().toISOString(),

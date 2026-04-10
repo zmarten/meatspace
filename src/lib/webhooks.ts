@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+// Uses Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
 
 /**
  * Delivers a webhook with HMAC-SHA256 signature for authenticity verification.
@@ -25,7 +25,17 @@ export async function deliverWebhook(params: {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (secret) {
     const signingPayload = `${timestamp}.${body}`;
-    const signature = createHmac('sha256', secret).update(signingPayload).digest('hex');
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, new TextEncoder().encode(signingPayload));
+    const signature = Array.from(new Uint8Array(sigBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
     headers['X-HITL-Timestamp'] = timestamp;
     headers['X-HITL-Signature'] = signature;
   }

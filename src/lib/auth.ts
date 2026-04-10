@@ -1,7 +1,21 @@
-import { timingSafeEqual, randomBytes } from 'crypto';
+// Use Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
+
+/** Constant-time string comparison to prevent timing attacks. */
+function timingSafeCompare(a: string, b: string): boolean {
+  const aBuf = new TextEncoder().encode(a);
+  const bBuf = new TextEncoder().encode(b);
+  if (aBuf.length !== bBuf.length) return false;
+  let result = 0;
+  for (let i = 0; i < aBuf.length; i++) result |= aBuf[i] ^ bBuf[i];
+  return result === 0;
+}
 
 export function generateApiKey(): string {
-  return 'hitl_' + randomBytes(30).toString('base64url');
+  const bytes = new Uint8Array(30);
+  crypto.getRandomValues(bytes);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return 'hitl_' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function isAllowedCallbackUrl(url: string): boolean {
@@ -33,29 +47,11 @@ export function isAllowedCallbackUrl(url: string): boolean {
  */
 export function validateApiKey(bearerToken: string): boolean {
   const envKey = process.env.HITL_API_KEY;
-  if (envKey) {
-    try {
-      const a = Buffer.from(bearerToken);
-      const b = Buffer.from(envKey);
-      if (a.length === b.length && timingSafeEqual(a, b)) return true;
-    } catch {
-      // ignore buffer errors — fall through to false
-    }
-  }
+  if (envKey && timingSafeCompare(bearerToken, envKey)) return true;
 
   // Mock mode: accept the dev key only outside production
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.USE_MOCK === 'true'
-  ) {
-    const mockKey = 'hitl_mock-dev-key-for-local-testing';
-    try {
-      const a = Buffer.from(bearerToken);
-      const b = Buffer.from(mockKey);
-      if (a.length === b.length && timingSafeEqual(a, b)) return true;
-    } catch {
-      // ignore
-    }
+  if (process.env.NODE_ENV !== 'production' && process.env.USE_MOCK === 'true') {
+    if (timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) return true;
   }
 
   return false;
