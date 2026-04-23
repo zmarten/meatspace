@@ -154,8 +154,8 @@ export async function createHitlRequest(params: {
     return fail('Failed to create request', 'request_create_failed', 500);
   }
 
-  // Fire notification (never await — fire and forget)
-  void sendNotification({
+  // Await notification — CF Workers terminate after response, so fire-and-forget gets killed
+  await sendNotification({
     id: data.id,
     title: data.title,
     agent_name: data.agent_name,
