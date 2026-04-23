@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = createServiceClient();
+  const supabase = await createServiceClient();
   const { searchParams } = new URL(req.url);
   // Cloudflare Workers wall-clock limit is 30s; cap at 25s to leave a safe margin
   const timeoutMs = Math.min(parseInt(searchParams.get('timeout') || '25000', 10) || 25000, 25000);

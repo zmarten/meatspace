@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = createServiceClient();
+  const supabase = await createServiceClient();
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status') || 'pending';
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 100);

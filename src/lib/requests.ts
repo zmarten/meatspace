@@ -115,7 +115,7 @@ export async function createHitlRequest(params: {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + timeoutSeconds * 1000).toISOString();
 
-  const supabase = createServiceClient();
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from('hitl_requests')
     .insert({

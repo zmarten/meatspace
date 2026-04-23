@@ -142,7 +142,7 @@ async function handleAskHuman(args: Record<string, unknown>): Promise<McpToolRes
   }
 
   const { id } = result.data;
-  const supabase = createServiceClient();
+  const supabase = await createServiceClient();
 
   // Long-poll for up to 50s (under Vercel's 60s limit)
   const deadline = Date.now() + 50000;
