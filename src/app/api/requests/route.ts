@@ -6,26 +6,35 @@ import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
 
 export async function POST(req: NextRequest) {
-  let body: CreateRequestBody;
   try {
-    body = await req.json();
-  } catch {
+    let body: CreateRequestBody;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body', code: 'invalid_request_body' },
+        { status: 400 }
+      );
+    }
+
+    const result = await createHitlRequest({ body });
+
+    if ('error' in result) {
+      return NextResponse.json(
+        { success: false, error: result.error, code: result.code },
+        { status: result.status }
+      );
+    }
+
+    return NextResponse.json({ success: true, data: result.data }, { status: 201 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
     return NextResponse.json(
-      { success: false, error: 'Invalid request body', code: 'invalid_request_body' },
-      { status: 400 }
+      { success: false, error: message, stack, code: 'unhandled_error' },
+      { status: 500 }
     );
   }
-
-  const result = await createHitlRequest({ body });
-
-  if ('error' in result) {
-    return NextResponse.json(
-      { success: false, error: result.error, code: result.code },
-      { status: result.status }
-    );
-  }
-
-  return NextResponse.json({ success: true, data: result.data }, { status: 201 });
 }
 
 export async function GET(req: NextRequest) {
