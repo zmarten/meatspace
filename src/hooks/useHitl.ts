@@ -28,7 +28,7 @@ export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
     try {
       const params = new URLSearchParams({ status: statusFilter, limit: '100' });
       const res = await globalThis.fetch(`/api/requests?${params}`, {
-        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_HITL_ADMIN_SECRET || '' },
+        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_ADMIN_SECRET || '' },
       });
       const json = await res.json();
       if (json.success && json.data) {

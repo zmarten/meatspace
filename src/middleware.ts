@@ -19,7 +19,7 @@ export function middleware(req: NextRequest) {
   // GET /api/requests — list all requests (admin secret)
   if (pathname === '/api/requests' && method === 'GET') {
     const secret = req.headers.get('x-admin-secret');
-    if (!secret || secret !== process.env.HITL_ADMIN_SECRET) {
+    if (!secret || secret !== process.env.ADMIN_SECRET) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: missing or invalid x-admin-secret header' },
         { status: 401 }
