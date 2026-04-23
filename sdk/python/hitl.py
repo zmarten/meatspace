@@ -8,7 +8,7 @@ Usage:
     from meatspace import MeatSpace
 
     ms = MeatSpace(
-        base_url="https://meatspace.app",
+        base_url="https://meatspace.run",
         api_key="hitl_...",
     )
 

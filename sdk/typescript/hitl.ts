@@ -8,7 +8,7 @@
  *   import { MeatSpace } from '@meatspace/sdk';
  *
  *   const ms = new MeatSpace({
- *     baseUrl: 'https://meatspace.app',
+ *     baseUrl: 'https://meatspace.run',
  *     apiKey: 'hitl_...',
  *   });
  *
