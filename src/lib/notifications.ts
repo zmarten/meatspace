@@ -38,7 +38,7 @@ async function sendEmail(request: NotifiableRequest, reviewUrl: string): Promise
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: process.env.NOTIFICATION_FROM || 'MeatSpace <noreply@meatspace.app>',
+      from: process.env.NOTIFICATION_FROM || 'MeatSpace <noreply@meatspace.run>',
       to: [process.env.NOTIFICATION_EMAIL],
       subject: `[MeatSpace] ${request.title}`,
       html,

@@ -47,7 +47,7 @@ Response:
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.app/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-07T19:00:00.000Z"
   }

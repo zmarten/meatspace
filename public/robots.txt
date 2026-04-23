@@ -9,4 +9,5 @@ Allow: /
 # See /llms-full.txt for complete API documentation
 # See /.well-known/agent.json for structured agent card
 # See /.well-known/mcp.json for MCP server manifest
+# See /agents.md for the full agent integration guide
 # See /api/status for real-time availability and pricing

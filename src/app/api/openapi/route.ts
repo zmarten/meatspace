@@ -9,7 +9,7 @@ const spec = {
     version: '0.1.0',
     description:
       'Flesh-in-the-loop service. AI agents submit content plus 2-4 choices, humans choose, and agents receive a structured result.',
-    contact: { url: 'https://meatspace.app' },
+    contact: { url: 'https://meatspace.run' },
   },
   servers: [{ url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }],
   paths: {

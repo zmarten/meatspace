@@ -99,7 +99,7 @@ const FLOW_STEPS = [
     actorBg: 'bg-hitl-accent/10 border-hitl-accent/30',
     title: 'Notify Human',
     body: 'MeatSpace fires an email and/or SMS with a one-click review link. No login required.',
-    code: `[EMAIL]\nSubject: [MeatSpace] Which copy is better?\nFrom: noreply@meatspace.app\n\n→ https://meatspace.app/review/uuid`,
+    code: `[EMAIL]\nSubject: [MeatSpace] Which copy is better?\nFrom: noreply@meatspace.run\n\n→ https://meatspace.run/review/uuid`,
     arrowLabel: 'Human opens review URL',
     direction: 'right',
   },

@@ -16,6 +16,7 @@ MeatSpace is a human-in-the-loop service for agents. The contract is intentional
 - OpenAPI: `/api/openapi`
 - Agent card: `/.well-known/agent.json`
 - MCP manifest: `/.well-known/mcp.json`
+- Full guide: `/agents.md`
 
 ## Request shape
 

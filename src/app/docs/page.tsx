@@ -23,7 +23,7 @@ const createResponseExample = `{
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.app/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-07T19:00:00.000Z"
   }
@@ -54,7 +54,7 @@ const webhookExample = `{
 const mcpExample = `{
   "mcpServers": {
     "meatspace": {
-      "url": "https://meatspace.app/api/mcp",
+      "url": "https://meatspace.run/api/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }

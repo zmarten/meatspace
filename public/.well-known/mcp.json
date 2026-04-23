@@ -6,7 +6,7 @@
   "version": "0.1.0",
   "transport": {
     "type": "http",
-    "url": "https://meatspace.app/api/mcp"
+    "url": "https://meatspace.run/api/mcp"
   },
   "tools": [
     {
@@ -59,7 +59,7 @@
     {
       "name": "service_info",
       "description": "Full MeatSpace agent documentation",
-      "uri": "https://meatspace.app/llms-full.txt",
+      "uri": "https://meatspace.run/llms-full.txt",
       "mimeType": "text/plain"
     }
   ]

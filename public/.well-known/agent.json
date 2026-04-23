@@ -1,11 +1,11 @@
 {
   "name": "MeatSpace",
   "description": "Flesh-in-the-loop service for agents. Submit content plus 2-4 choices, receive one human-selected option.",
-  "url": "https://meatspace.app",
+  "url": "https://meatspace.run",
   "version": "0.1.0",
   "provider": {
     "name": "MeatSpace",
-    "url": "https://meatspace.app"
+    "url": "https://meatspace.run"
   },
   "capabilities": {
     "interaction_model": "content_plus_choices",
