@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateApiKey } from '@/lib/auth';
+import { validateApiKey, timingSafeCompare } from '@/lib/auth';
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -18,8 +18,9 @@ export function middleware(req: NextRequest) {
 
   // GET /api/requests — list all requests (admin secret)
   if (pathname === '/api/requests' && method === 'GET') {
-    const secret = req.headers.get('x-admin-secret');
-    if (!secret || secret !== process.env.ADMIN_SECRET) {
+    const secret = req.headers.get('x-admin-secret') || '';
+    const expected = process.env.ADMIN_SECRET || '';
+    if (!secret || !expected || !timingSafeCompare(secret, expected)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: missing or invalid x-admin-secret header' },
         { status: 401 }

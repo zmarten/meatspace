@@ -1,7 +1,7 @@
 // Use Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
 
 /** Constant-time string comparison to prevent timing attacks. */
-function timingSafeCompare(a: string, b: string): boolean {
+export function timingSafeCompare(a: string, b: string): boolean {
   const aBuf = new TextEncoder().encode(a);
   const bBuf = new TextEncoder().encode(b);
   if (aBuf.length !== bBuf.length) return false;
