@@ -144,8 +144,8 @@ async function handleAskHuman(args: Record<string, unknown>): Promise<McpToolRes
   const { id } = result.data;
   const supabase = await createServiceClient();
 
-  // Long-poll for up to 50s (under Vercel's 60s limit)
-  const deadline = Date.now() + 50000;
+  // Long-poll for up to 20s (under CF Workers' ~25s limit)
+  const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const { data: check } = await supabase
       .from('hitl_requests')
@@ -255,6 +255,11 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+
+      // MCP notifications (e.g. notifications/initialized) have no id and expect no response
+      case 'notifications/initialized':
+      case 'notifications/cancelled':
+        return new NextResponse(null, { status: 204 });
 
       default:
         return NextResponse.json({
