@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { HitlRequest, RequestStatus } from '@/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HitlRequest, RequestStatus, ApiKeyInfo, CreateApiKeyResponse } from '@/types';
 
 export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   const [requests, setRequests] = useState<HitlRequest[]>([]);
@@ -53,4 +53,61 @@ export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   }, [statusFilter]);
 
   return { requests, loading, unauthorized };
+}
+
+export function useApiKeys() {
+  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchKeys = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/keys', { credentials: 'same-origin' });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setKeys(json.data as ApiKeyInfo[]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch API keys:', err);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void fetchKeys();
+  }, [fetchKeys]);
+
+  const createKey = useCallback(async (name: string, ownerEmail?: string): Promise<CreateApiKeyResponse | null> => {
+    try {
+      const res = await fetch('/api/admin/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name, owner_email: ownerEmail || undefined }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        await fetchKeys();
+        return json.data as CreateApiKeyResponse;
+      }
+    } catch (err) {
+      console.error('Failed to create API key:', err);
+    }
+    return null;
+  }, [fetchKeys]);
+
+  const toggleKey = useCallback(async (id: string, isActive: boolean) => {
+    try {
+      await fetch(`/api/admin/keys/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      await fetchKeys();
+    } catch (err) {
+      console.error('Failed to toggle API key:', err);
+    }
+  }, [fetchKeys]);
+
+  return { keys, loading, createKey, toggleKey };
 }

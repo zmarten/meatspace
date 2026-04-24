@@ -111,8 +111,9 @@ async function handleGetServiceStatus(): Promise<McpToolResult> {
   };
 }
 
-async function handleAskHuman(args: Record<string, unknown>): Promise<McpToolResult> {
+async function handleAskHuman(args: Record<string, unknown>, apiKeyId: string | null): Promise<McpToolResult> {
   const result = await createHitlRequest({
+    apiKeyId,
     body: {
       agent_name: (args.agent_name as string) || 'mcp-agent',
       title: args.title as string,
@@ -187,7 +188,8 @@ async function handleAskHuman(args: Record<string, unknown>): Promise<McpToolRes
 
 export async function POST(req: NextRequest) {
   const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
-  if (!bearerToken || !validateApiKey(bearerToken)) {
+  const auth = bearerToken ? await validateApiKey(bearerToken) : { valid: false, keyId: null, keyName: null };
+  if (!auth.valid) {
     return NextResponse.json(
       { jsonrpc: '2.0', error: { code: -32000, message: 'Unauthorized: valid API key required' } },
       { status: 401 }
@@ -243,7 +245,7 @@ export async function POST(req: NextRequest) {
 
         const result = name === 'get_service_status'
           ? await handleGetServiceStatus()
-          : await handleAskHuman(args || {});
+          : await handleAskHuman(args || {}, auth.keyId);
 
         return NextResponse.json({
           jsonrpc: '2.0',

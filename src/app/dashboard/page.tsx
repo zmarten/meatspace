@@ -5,8 +5,8 @@ export const runtime = 'edge';
 import { useState } from 'react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { HitlRequest, RequestStatus } from '@/types';
-import { useRequests } from '@/hooks/useHitl';
+import { HitlRequest, RequestStatus, ApiKeyInfo, CreateApiKeyResponse } from '@/types';
+import { useRequests, useApiKeys } from '@/hooks/useHitl';
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -20,10 +20,12 @@ function RequestCard({
   request,
   selected,
   onClick,
+  keyName,
 }: {
   request: HitlRequest;
   selected: boolean;
   onClick: () => void;
+  keyName?: string | null;
 }) {
   return (
     <button
@@ -47,6 +49,11 @@ function RequestCard({
         <span className="text-[11px] px-2 py-0.5 rounded-sm bg-hitl-accent-soft text-hitl-accent font-mono tracking-wider">
           {request.choices?.length || 0} choices
         </span>
+        {keyName && (
+          <span className="text-[11px] px-2 py-0.5 rounded-sm bg-hitl-surface-hover text-hitl-text-muted font-mono tracking-wider">
+            {keyName}
+          </span>
+        )}
         {request.status === 'completed' && (
           <span className="text-[11px] text-hitl-approve font-mono tracking-wider uppercase bg-hitl-approve-soft px-1.5 py-0.5 rounded-sm">
             resolved
@@ -131,12 +138,172 @@ function DetailPanel({ request }: { request: HitlRequest }) {
   );
 }
 
+type DashboardTab = 'dispatches' | 'keys';
+
+function ApiKeysPanel() {
+  const { keys, loading, createKey, toggleKey } = useApiKeys();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<CreateApiKeyResponse | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCreate() {
+    if (!name.trim() || creating) return;
+    setCreating(true);
+    const result = await createKey(name.trim(), ownerEmail.trim() || undefined);
+    if (result) {
+      setRevealedKey(result);
+      setName('');
+      setOwnerEmail('');
+      setShowCreate(false);
+    }
+    setCreating(false);
+  }
+
+  async function handleCopy(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (loading) {
+    return <div className="text-center py-12 text-hitl-text-muted text-sm">Loading keys...</div>;
+  }
+
+  return (
+    <div>
+      {revealedKey && (
+        <div className="bg-hitl-surface rounded border-2 border-hitl-accent p-5 mb-6">
+          <p className="label-tracked-accent mb-2">new api key created</p>
+          <p className="text-sm text-hitl-text-secondary mb-3">
+            Copy this key now. It will not be shown again.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-hitl-bg border border-hitl-border rounded px-3 py-2 text-sm font-mono text-hitl-text break-all">
+              {revealedKey.api_key}
+            </code>
+            <button
+              onClick={() => handleCopy(revealedKey.api_key)}
+              className="px-3 py-2 rounded-sm border border-hitl-border text-xs font-semibold uppercase tracking-wide text-hitl-text-secondary hover:text-hitl-text hover:border-hitl-border-hover transition-all flex-shrink-0"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <button
+            onClick={() => setRevealedKey(null)}
+            className="mt-3 text-xs text-hitl-text-muted hover:text-hitl-text-secondary"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-hitl-text-secondary">
+          {keys.length} key{keys.length !== 1 ? 's' : ''}
+        </p>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-3 py-1.5 rounded-sm text-xs font-semibold uppercase tracking-wide bg-hitl-accent text-hitl-bg hover:opacity-90 transition-all"
+        >
+          {showCreate ? 'Cancel' : 'Create key'}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="bg-hitl-surface rounded border border-hitl-border p-4 mb-4">
+          <div className="grid gap-3">
+            <label className="grid gap-1">
+              <span className="text-xs font-mono uppercase tracking-[0.16em] text-hitl-text-muted">
+                Key name *
+              </span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. deploy-bot-prod"
+                className="w-full rounded border border-hitl-border bg-hitl-bg px-3 py-2 text-sm text-hitl-text outline-none focus:border-hitl-accent"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-mono uppercase tracking-[0.16em] text-hitl-text-muted">
+                Owner email (optional)
+              </span>
+              <input
+                type="email"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="e.g. dev@example.com"
+                className="w-full rounded border border-hitl-border bg-hitl-bg px-3 py-2 text-sm text-hitl-text outline-none focus:border-hitl-accent"
+              />
+            </label>
+            <button
+              onClick={handleCreate}
+              disabled={!name.trim() || creating}
+              className="w-full py-2.5 rounded-sm text-xs font-semibold uppercase tracking-wide bg-hitl-accent text-hitl-bg hover:opacity-90 transition-all disabled:opacity-40"
+            >
+              {creating ? 'Creating...' : 'Generate key'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-2">
+        {keys.map((key) => (
+          <div
+            key={key.id}
+            className={`bg-hitl-surface rounded border p-4 ${
+              key.is_active ? 'border-hitl-border' : 'border-hitl-border opacity-50'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-hitl-text truncate">{key.name}</p>
+                <p className="text-xs font-mono text-hitl-text-muted">{key.key_prefix}...</p>
+              </div>
+              <button
+                onClick={() => toggleKey(key.id, !key.is_active)}
+                className={`flex-shrink-0 px-2.5 py-1 rounded-sm text-[11px] font-semibold uppercase tracking-wide border transition-all ${
+                  key.is_active
+                    ? 'border-hitl-border text-hitl-text-secondary hover:text-hitl-reject hover:border-hitl-reject'
+                    : 'border-hitl-border text-hitl-text-muted hover:text-hitl-approve hover:border-hitl-approve'
+                }`}
+              >
+                {key.is_active ? 'Revoke' : 'Activate'}
+              </button>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-hitl-text-muted">
+              {key.owner_email && <span>{key.owner_email}</span>}
+              <span>Created {timeAgo(key.created_at)}</span>
+              {key.last_used_at && <span>Last used {timeAgo(key.last_used_at)}</span>}
+              {!key.is_active && (
+                <span className="text-hitl-reject uppercase font-mono tracking-wider">revoked</span>
+              )}
+            </div>
+          </div>
+        ))}
+        {keys.length === 0 && (
+          <div className="text-center py-8 text-hitl-text-muted text-sm">
+            No API keys yet. Create one to get started.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const router = useRouter();
+  const [tab, setTab] = useState<DashboardTab>('dispatches');
   const [filter, setFilter] = useState<RequestStatus | 'all'>('pending');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const { requests, loading, unauthorized } = useRequests('all');
+  const { keys } = useApiKeys();
+
+  const keysById = Object.fromEntries(keys.map((k) => [k.id, k]));
 
   const filteredRequests =
     filter === 'all' ? requests : requests.filter((request) => request.status === filter);
@@ -200,6 +367,28 @@ export default function Dashboard() {
           </button>
         </div>
 
+        <div className="flex gap-2 mb-6">
+          {([
+            { label: 'Dispatches', value: 'dispatches' as DashboardTab },
+            { label: 'API Keys', value: 'keys' as DashboardTab },
+          ]).map((item) => (
+            <button
+              key={item.value}
+              onClick={() => setTab(item.value)}
+              className={`px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wide transition-all ${
+                tab === item.value
+                  ? 'bg-hitl-accent text-hitl-bg'
+                  : 'text-hitl-text-secondary hover:text-hitl-text border border-hitl-border hover:border-hitl-border-hover'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'keys' && <ApiKeysPanel />}
+
+        {tab === 'dispatches' && <>
         <div className="grid grid-cols-3 gap-3 mb-8">
           {[
             { label: 'Queued', value: counts.pending, pulse: counts.pending > 0 },
@@ -262,6 +451,7 @@ export default function Dashboard() {
                     request={request}
                     selected={selectedId === request.id}
                     onClick={() => setSelectedId(request.id)}
+                    keyName={request.api_key_id ? keysById[request.api_key_id]?.name : null}
                   />
                 ))}
               </div>
@@ -278,6 +468,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+        </>}
       </div>
     </main>
   );

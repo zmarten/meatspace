@@ -18,6 +18,7 @@ function fail(error: string, code: string, status: number): CreateRequestError {
 
 export async function createHitlRequest(params: {
   body: CreateRequestBody;
+  apiKeyId?: string | null;
 }): Promise<{ data: CreateRequestResponse } | CreateRequestError> {
   const { body } = params;
 
@@ -119,6 +120,7 @@ export async function createHitlRequest(params: {
     .from('hitl_requests')
     .insert({
       id,
+      api_key_id: params.apiKeyId || null,
       agent_name: body.agent_name,
       title: body.title,
       content: body.content || null,

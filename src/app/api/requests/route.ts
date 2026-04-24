@@ -2,10 +2,27 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { validateApiKey } from '@/lib/auth';
 import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
 
 export async function POST(req: NextRequest) {
+  const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!bearerToken) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: valid Bearer token required' },
+      { status: 401 }
+    );
+  }
+
+  const auth = await validateApiKey(bearerToken);
+  if (!auth.valid) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: valid Bearer token required' },
+      { status: 401 }
+    );
+  }
+
   let body: CreateRequestBody;
   try {
     body = await req.json();
@@ -16,7 +33,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await createHitlRequest({ body });
+  const result = await createHitlRequest({ body, apiKeyId: auth.keyId });
 
   if ('error' in result) {
     return NextResponse.json(
@@ -38,7 +55,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('hitl_requests')
     .select(
-      'id, agent_name, title, content, content_type, choices, callback_url, metadata, status, selected, responded_at, expires_at, created_at, updated_at'
+      'id, agent_name, title, content, content_type, choices, callback_url, metadata, status, selected, responded_at, expires_at, created_at, updated_at, api_key_id'
     )
     .order('created_at', { ascending: false })
     .limit(limit)

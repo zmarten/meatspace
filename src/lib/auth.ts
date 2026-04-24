@@ -55,6 +55,13 @@ export function generateApiKey(): string {
   return 'hitl_' + bytesToBase64Url(bytes);
 }
 
+export async function hashApiKey(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', encodeUtf8(key));
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function generateReviewToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -132,17 +139,58 @@ export async function validateAdminSession(sessionValue: string | undefined | nu
   }
 }
 
-/**
- * Validate a Bearer token against the HITL_API_KEY env var using timing-safe comparison.
- * In mock mode, also accepts the hardcoded dev key â€” but never in production.
- */
-export function validateApiKey(bearerToken: string): boolean {
-  const envKey = process.env.HITL_API_KEY;
-  if (envKey && timingSafeCompare(bearerToken, envKey)) return true;
+export interface ApiKeyValidationResult {
+  valid: boolean;
+  keyId: string | null;
+  keyName: string | null;
+}
 
+/**
+ * Validate a Bearer token by looking it up in the hitl_api_keys table (SHA-256 hash match).
+ * Falls back to the HITL_API_KEY env var for backwards compatibility.
+ * In mock mode, also accepts the hardcoded dev key.
+ */
+export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidationResult> {
+  const invalid: ApiKeyValidationResult = { valid: false, keyId: null, keyName: null };
+
+  // Mock dev key — synchronous check before any DB call
   if (process.env.NODE_ENV !== 'production' && process.env.USE_MOCK === 'true') {
-    if (timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) return true;
+    if (timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) {
+      return { valid: true, keyId: null, keyName: 'Local Dev Key' };
+    }
   }
 
-  return false;
+  // DB lookup by hash
+  try {
+    const { createServiceClient } = await import('./supabase');
+    const supabase = await createServiceClient();
+    const keyHash = await hashApiKey(bearerToken);
+
+    const { data } = await supabase
+      .from('hitl_api_keys')
+      .select('id, name, is_active')
+      .eq('key_hash', keyHash)
+      .single();
+
+    if (data && data.is_active) {
+      // Fire-and-forget last_used_at update
+      supabase
+        .from('hitl_api_keys')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', data.id)
+        .then(() => {}, () => {});
+
+      return { valid: true, keyId: data.id, keyName: data.name };
+    }
+  } catch {
+    // DB lookup failed — fall through to env var check
+  }
+
+  // Env var fallback (backwards compatibility)
+  const envKey = process.env.HITL_API_KEY;
+  if (envKey && timingSafeCompare(bearerToken, envKey)) {
+    return { valid: true, keyId: null, keyName: null };
+  }
+
+  return invalid;
 }

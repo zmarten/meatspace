@@ -40,7 +40,7 @@ function seed() {
       name: 'Local Dev Key',
       key_hash: hashApiKey(mockRawKey),
       key_prefix: mockRawKey.slice(0, 12),
-      agent_name: 'dev-agent',
+      owner_email: null,
       is_active: true,
       created_at: now,
       last_used_at: null,

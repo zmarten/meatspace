@@ -26,6 +26,24 @@ export interface HitlRequest {
   expires_at: string | null;
   created_at: string;
   updated_at: string;
+  api_key_id: string | null;
+}
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  key_prefix: string;
+  owner_email: string | null;
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface CreateApiKeyResponse {
+  id: string;
+  name: string;
+  key_prefix: string;
+  api_key: string;
 }
 
 // === API Request/Response Types ===
