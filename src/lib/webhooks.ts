@@ -1,4 +1,6 @@
-// Uses Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
+import { isAllowedCallbackUrl } from './auth';
+
+// Uses Web Crypto globals â€” Edge runtime does not allow `import ... from 'crypto'`
 
 /**
  * Delivers a webhook with HMAC-SHA256 signature for authenticity verification.
@@ -16,12 +18,13 @@ export async function deliverWebhook(params: {
   secret?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { url, payload, secret } = params;
+  if (!isAllowedCallbackUrl(url)) {
+    return { success: false, error: 'Webhook URL is not on the allowlist' };
+  }
+
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const body = JSON.stringify(payload);
 
-  // Only sign the payload when a real secret is configured; omit the
-  // signature headers entirely if no secret is set to avoid producing a
-  // valid-looking but forgeable HMAC signed with a garbage key.
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (secret) {
     const signingPayload = `${timestamp}.${body}`;
@@ -32,7 +35,11 @@ export async function deliverWebhook(params: {
       false,
       ['sign']
     );
-    const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, new TextEncoder().encode(signingPayload));
+    const sigBuffer = await crypto.subtle.sign(
+      'HMAC',
+      keyMaterial,
+      new TextEncoder().encode(signingPayload)
+    );
     const signature = Array.from(new Uint8Array(sigBuffer))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
@@ -56,7 +63,10 @@ export async function deliverWebhook(params: {
     }
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.name === 'AbortError' ? 'Webhook timed out (10s)' : err.message };
+    return {
+      success: false,
+      error: err.name === 'AbortError' ? 'Webhook timed out (10s)' : err.message,
+    };
   } finally {
     clearTimeout(timeout);
   }

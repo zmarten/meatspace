@@ -38,7 +38,7 @@ Authorization: Bearer YOUR_API_KEY
 | `recommended_option` | string | No | Optional choice id the agent recommends |
 | `run_id` | string | No | Optional workflow run id |
 | `trace_id` | string | No | Optional trace id |
-| `callback_url` | string | No | Public HTTPS webhook URL |
+| `callback_url` | string | No | HTTPS webhook URL whose hostname is on the allowlist |
 | `metadata` | object | No | Arbitrary metadata echoed back in the webhook |
 | `timeout_seconds` | integer | No | Expiry in seconds, max 86400 |
 
@@ -74,7 +74,7 @@ Authorization: Bearer YOUR_API_KEY
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.app/review/uuid",
+    "review_url": "https://meatspace.app/review/uuid?token=opaque-review-token",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-07T19:00:00.000Z"
   }

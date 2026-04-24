@@ -3,8 +3,10 @@
 export const runtime = 'edge';
 
 import { useState } from 'react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { HitlRequest, RequestStatus } from '@/types';
-import { useRequests, submitResponse } from '@/hooks/useHitl';
+import { useRequests } from '@/hooks/useHitl';
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -39,15 +41,21 @@ function RequestCard({
         </span>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-hitl-text-secondary font-mono tracking-wider">{request.agent_name}</span>
+        <span className="text-xs text-hitl-text-secondary font-mono tracking-wider">
+          {request.agent_name}
+        </span>
         <span className="text-[11px] px-2 py-0.5 rounded-sm bg-hitl-accent-soft text-hitl-accent font-mono tracking-wider">
           {request.choices?.length || 0} choices
         </span>
         {request.status === 'completed' && (
-          <span className="text-[11px] text-hitl-approve font-mono tracking-wider uppercase bg-hitl-approve-soft px-1.5 py-0.5 rounded-sm">resolved</span>
+          <span className="text-[11px] text-hitl-approve font-mono tracking-wider uppercase bg-hitl-approve-soft px-1.5 py-0.5 rounded-sm">
+            resolved
+          </span>
         )}
         {request.status === 'expired' && (
-          <span className="text-[11px] text-hitl-reject font-mono tracking-wider uppercase bg-hitl-reject-soft px-1.5 py-0.5 rounded-sm">decayed</span>
+          <span className="text-[11px] text-hitl-reject font-mono tracking-wider uppercase bg-hitl-reject-soft px-1.5 py-0.5 rounded-sm">
+            decayed
+          </span>
         )}
       </div>
     </button>
@@ -55,17 +63,6 @@ function RequestCard({
 }
 
 function DetailPanel({ request }: { request: HitlRequest }) {
-  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!selectedChoice || submitting) return;
-    setSubmitting(true);
-    await submitResponse(request.id, selectedChoice);
-    setSubmitting(false);
-    setSelectedChoice(null);
-  };
-
   if (request.status === 'completed') {
     return (
       <div className="bg-hitl-surface rounded border border-hitl-border p-5">
@@ -73,9 +70,13 @@ function DetailPanel({ request }: { request: HitlRequest }) {
         <p className="text-xs font-mono text-hitl-text-secondary mb-4">{request.agent_name}</p>
         <div className="bg-hitl-approve-soft rounded p-4">
           <p className="label-tracked-accent mb-1">Flesh Resolution</p>
-          <p className="text-sm text-hitl-text">Selected: <span className="font-mono">{request.selected}</span></p>
+          <p className="text-sm text-hitl-text">
+            Selected: <span className="font-mono">{request.selected}</span>
+          </p>
           {request.responded_at && (
-            <p className="text-xs text-hitl-text-muted mt-1">at {new Date(request.responded_at).toLocaleString()}</p>
+            <p className="text-xs text-hitl-text-muted mt-1">
+              at {new Date(request.responded_at).toLocaleString()}
+            </p>
           )}
         </div>
       </div>
@@ -108,47 +109,44 @@ function DetailPanel({ request }: { request: HitlRequest }) {
       <p className="label-tracked mb-2">Choices</p>
       <div className="grid gap-2 mb-4">
         {(request.choices || []).map((choice) => (
-          <button
+          <div
             key={choice.id}
-            onClick={() => setSelectedChoice(choice.id)}
-            className={`text-left p-3.5 rounded border transition-all ${
-              selectedChoice === choice.id
-                ? 'border-hitl-accent bg-hitl-accent-soft/30'
-                : 'border-hitl-border bg-hitl-surface-hover hover:border-hitl-border-hover'
-            }`}
+            className="text-left p-3.5 rounded border border-hitl-border bg-hitl-surface-hover"
           >
             <p className="text-sm font-medium text-hitl-text">{choice.label}</p>
             <p className="text-[11px] text-hitl-text-muted font-mono">{choice.id}</p>
-          </button>
+          </div>
         ))}
       </div>
 
-      <button
-        disabled={!selectedChoice || submitting}
-        onClick={handleSubmit}
-        className="w-full py-2.5 rounded-sm text-sm font-semibold tracking-wide uppercase bg-hitl-accent text-hitl-bg hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-30"
-      >
-        {submitting ? 'Transmitting...' : 'Dispatch selection'}
-      </button>
+      <div className="rounded border border-hitl-border bg-hitl-surface-hover p-3">
+        <p className="text-xs font-mono text-hitl-text-muted uppercase tracking-[0.16em]">
+          Review tokens stay in the one-click human link only.
+        </p>
+        <p className="text-sm text-hitl-text-secondary mt-2">
+          This admin dashboard is read-only for pending requests after the security hardening update.
+        </p>
+      </div>
     </div>
   );
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [filter, setFilter] = useState<RequestStatus | 'all'>('pending');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { requests, loading } = useRequests('all');
+  const [loggingOut, setLoggingOut] = useState(false);
+  const { requests, loading, unauthorized } = useRequests('all');
 
-  const filteredRequests = filter === 'all'
-    ? requests
-    : requests.filter((r) => r.status === filter);
+  const filteredRequests =
+    filter === 'all' ? requests : requests.filter((request) => request.status === filter);
 
-  const selectedRequest = requests.find((r) => r.id === selectedId);
+  const selectedRequest = requests.find((request) => request.id === selectedId);
 
   const counts = {
-    pending: requests.filter(r => r.status === 'pending').length,
-    completed: requests.filter(r => r.status === 'completed').length,
-    expired: requests.filter(r => r.status === 'expired').length,
+    pending: requests.filter((request) => request.status === 'pending').length,
+    completed: requests.filter((request) => request.status === 'completed').length,
+    expired: requests.filter((request) => request.status === 'expired').length,
   };
 
   const filters: { label: string; value: RequestStatus | 'all'; count?: number }[] = [
@@ -158,25 +156,50 @@ export default function Dashboard() {
     { label: 'All', value: 'all' },
   ];
 
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/admin/session', { method: 'DELETE' });
+    } finally {
+      router.push('/dashboard/login');
+      router.refresh();
+    }
+  }
+
+  useEffect(() => {
+    if (unauthorized) {
+      router.push('/dashboard/login');
+    }
+  }, [router, unauthorized]);
+
+  if (unauthorized) return null;
+
   return (
     <main className="min-h-screen">
       <div className="max-w-5xl mx-auto px-6 py-10">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-baseline gap-3 mb-2">
-            <h1 className="wordmark">MEATSPACE</h1>
-            <span className="text-[11px] text-hitl-text-muted tracking-[0.15em] uppercase">
-              dispatch queue
-            </span>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-baseline gap-3 mb-2">
+              <h1 className="wordmark">MEATSPACE</h1>
+              <span className="text-[11px] text-hitl-text-muted tracking-[0.15em] uppercase">
+                dispatch queue
+              </span>
+            </div>
+            <p className="text-sm text-hitl-text-secondary">
+              {counts.pending > 0
+                ? `${counts.pending} dispatch${counts.pending === 1 ? '' : 'es'} awaiting wetware resolution.`
+                : 'Queue nominal. Flesh Node standing by.'}
+            </p>
           </div>
-          <p className="text-sm text-hitl-text-secondary">
-            {counts.pending > 0
-              ? `${counts.pending} dispatch${counts.pending === 1 ? '' : 'es'} awaiting wetware resolution.`
-              : 'Queue nominal. Flesh Node standing by.'}
-          </p>
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="px-4 py-2 rounded-sm border border-hitl-border text-xs font-semibold uppercase tracking-wide text-hitl-text-secondary hover:text-hitl-text hover:border-hitl-border-hover transition-all disabled:opacity-50"
+          >
+            {loggingOut ? 'Signing out...' : 'Sign out'}
+          </button>
         </div>
 
-        {/* Stats row */}
         <div className="grid grid-cols-3 gap-3 mb-8">
           {[
             { label: 'Queued', value: counts.pending, pulse: counts.pending > 0 },
@@ -185,34 +208,41 @@ export default function Dashboard() {
           ].map((item) => (
             <div
               key={item.label}
-              className={`bg-hitl-surface rounded p-4 border border-hitl-border${item.pulse ? ' border-t-2 border-t-hitl-accent' : ''}`}
+              className={`bg-hitl-surface rounded p-4 border border-hitl-border${
+                item.pulse ? ' border-t-2 border-t-hitl-accent' : ''
+              }`}
             >
               <p className="text-xs text-hitl-text-muted mb-1">{item.label}</p>
-              <p className={`text-xl font-medium ${item.pulse ? 'text-hitl-accent font-mono' : 'text-hitl-text'}`}>
+              <p
+                className={`text-xl font-medium ${
+                  item.pulse ? 'text-hitl-accent font-mono' : 'text-hitl-text'
+                }`}
+              >
                 {item.value}
               </p>
             </div>
           ))}
         </div>
 
-        {/* Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
-          {/* Left: Queue */}
           <div>
             <div className="flex gap-2 mb-4">
-              {filters.map((f) => (
+              {filters.map((item) => (
                 <button
-                  key={f.value}
-                  onClick={() => { setFilter(f.value); setSelectedId(null); }}
+                  key={item.value}
+                  onClick={() => {
+                    setFilter(item.value);
+                    setSelectedId(null);
+                  }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    filter === f.value
+                    filter === item.value
                       ? 'bg-hitl-accent text-hitl-bg font-semibold'
                       : 'text-hitl-text-secondary hover:text-hitl-text hover:bg-hitl-surface-hover'
                   }`}
                 >
-                  {f.label}
-                  {f.count !== undefined && (
-                    <span className="ml-1.5 text-[10px] opacity-60">{f.count}</span>
+                  {item.label}
+                  {item.count !== undefined && (
+                    <span className="ml-1.5 text-[10px] opacity-60">{item.count}</span>
                   )}
                 </button>
               ))}
@@ -226,27 +256,24 @@ export default function Dashboard() {
               </div>
             ) : (
               <div>
-                {filteredRequests.map((req) => (
+                {filteredRequests.map((request) => (
                   <RequestCard
-                    key={req.id}
-                    request={req}
-                    selected={selectedId === req.id}
-                    onClick={() => setSelectedId(req.id)}
+                    key={request.id}
+                    request={request}
+                    selected={selectedId === request.id}
+                    onClick={() => setSelectedId(request.id)}
                   />
                 ))}
               </div>
             )}
           </div>
 
-          {/* Right: Detail panel */}
           <div className="lg:sticky lg:top-10 self-start">
             {selectedRequest ? (
               <DetailPanel request={selectedRequest} />
             ) : (
               <div className="bg-hitl-surface rounded border border-hitl-border p-8 text-center">
-                <p className="text-sm text-hitl-text-muted">
-                  Select a dispatch to inspect.
-                </p>
+                <p className="text-sm text-hitl-text-muted">Select a dispatch to inspect.</p>
               </div>
             )}
           </div>

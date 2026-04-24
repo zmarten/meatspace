@@ -1,6 +1,6 @@
-// crypto.randomUUID() is a Web Crypto global — no import needed in Edge runtime
+// crypto.randomUUID() is a Web Crypto global â€” no import needed in Edge runtime
 import { createServiceClient } from './supabase';
-import { isAllowedCallbackUrl } from './auth';
+import { generateReviewToken, hashReviewToken, isAllowedCallbackUrl } from './auth';
 import { sendNotification } from './notifications';
 import { CreateRequestBody, CreateRequestResponse, ContentType } from '@/types';
 
@@ -21,7 +21,6 @@ export async function createHitlRequest(params: {
 }): Promise<{ data: CreateRequestResponse } | CreateRequestError> {
   const { body } = params;
 
-  // Validate required fields
   if (!body.agent_name || typeof body.agent_name !== 'string') {
     return fail('agent_name is required', 'agent_name_required', 400);
   }
@@ -36,7 +35,6 @@ export async function createHitlRequest(params: {
     return fail('title max 200 characters', 'title_too_long', 400);
   }
 
-  // Validate choices
   if (!Array.isArray(body.choices) || body.choices.length < 2 || body.choices.length > 4) {
     return fail('choices must be an array of 2-4 items', 'invalid_choice_count', 400);
   }
@@ -49,7 +47,6 @@ export async function createHitlRequest(params: {
     }
   }
 
-  // Validate content
   if (body.content && typeof body.content === 'string' && body.content.length > 50000) {
     return fail('content max 50KB', 'content_too_large', 400);
   }
@@ -63,14 +60,14 @@ export async function createHitlRequest(params: {
     );
   }
 
-  // Validate callback URL
-  if (body.callback_url) {
-    if (!isAllowedCallbackUrl(body.callback_url)) {
-      return fail('callback_url must be a public HTTPS URL', 'callback_url_not_https', 400);
-    }
+  if (body.callback_url && !isAllowedCallbackUrl(body.callback_url)) {
+    return fail(
+      'callback_url must use https and match an allowlisted webhook host',
+      'callback_url_not_allowed',
+      400
+    );
   }
 
-  // Validate metadata
   if (body.metadata) {
     const metaStr = JSON.stringify(body.metadata);
     if (metaStr.length > 10000) {
@@ -112,6 +109,8 @@ export async function createHitlRequest(params: {
 
   const timeoutSeconds = Math.min(body.timeout_seconds || 3600, 86400);
   const id = crypto.randomUUID();
+  const reviewToken = generateReviewToken();
+  const reviewTokenHash = await hashReviewToken(reviewToken);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + timeoutSeconds * 1000).toISOString();
 
@@ -126,10 +125,9 @@ export async function createHitlRequest(params: {
       content_type: contentType,
       choices: body.choices,
       callback_url: body.callback_url || null,
+      review_token_hash: reviewTokenHash,
       metadata: {
         ...(body.metadata || {}),
-        // Agent context fields are isolated under "_agent" to prevent collisions
-        // with user-supplied metadata keys.
         _agent: {
           ...(body.decision_reason ? { decision_reason: body.decision_reason } : {}),
           ...(body.confidence !== undefined ? { confidence: body.confidence } : {}),
@@ -154,7 +152,6 @@ export async function createHitlRequest(params: {
     return fail('Failed to create request', 'request_create_failed', 500);
   }
 
-  // Await notification — CF Workers terminate after response, so fire-and-forget gets killed
   await sendNotification({
     id: data.id,
     title: data.title,
@@ -167,7 +164,7 @@ export async function createHitlRequest(params: {
     data: {
       id: data.id,
       status: data.status,
-      review_url: `${appUrl}/review/${data.id}`,
+      review_url: `${appUrl}/review/${data.id}?token=${reviewToken}`,
       poll_url: `/api/requests/${data.id}`,
       expires_at: data.expires_at,
     },

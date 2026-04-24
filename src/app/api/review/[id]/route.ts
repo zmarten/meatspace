@@ -1,13 +1,19 @@
 export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { reviewTokenMatches } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase';
 import { toReviewResponse } from '@/lib/request-contract';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const reviewToken = req.headers.get('x-review-token');
+  if (!reviewToken) {
+    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+  }
+
   const { id } = await params;
   const supabase = await createServiceClient();
 
@@ -18,6 +24,11 @@ export async function GET(
     .single();
 
   if (error || !data) {
+    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+  }
+
+  const isAuthorized = await reviewTokenMatches(reviewToken, data.review_token_hash);
+  if (!isAuthorized) {
     return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
   }
 

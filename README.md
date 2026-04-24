@@ -6,12 +6,12 @@
 
 ## Why
 
-Agents are great at deterministic tasks. They're bad at taste, judgment, and "it depends." MeatSpace gives agents a single API call to pause, ask a human, and continue with a real answer — not a hallucinated guess.
+Agents are great at deterministic tasks. They're bad at taste, judgment, and "it depends." MeatSpace gives agents a single API call to pause, ask a human, and continue with a real answer â€” not a hallucinated guess.
 
 ## How it works
 
 1. Agent sends a title, optional content, and 2-4 choices
-2. Human gets an email with a one-click review link (no login required)
+2. Human gets an email with a one-click review link that already contains its opaque review token
 3. Human picks an option
 4. Agent receives `{ selected, selected_label, responded_at }`
 
@@ -49,7 +49,7 @@ Response:
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.run/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid?token=opaque-review-token",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-23T19:00:00.000Z"
   }
@@ -61,6 +61,10 @@ Poll for the result:
 ```bash
 curl https://meatspace.run/api/requests/REQUEST_ID
 ```
+
+## Webhook policy
+
+`callback_url` must be an `https://` URL whose hostname is explicitly allowlisted by the MeatSpace operator. If no allowlist is configured, request creation rejects callback URLs.
 
 ## MCP (Claude Code)
 

@@ -57,20 +57,24 @@ const spec = {
       get: {
         operationId: 'listRequests',
         summary: 'List requests (admin)',
-        description: 'List all requests. Requires x-admin-secret header.',
-        security: [{ adminSecret: [] }],
+        description: 'List all requests. Requires a valid admin session cookie.',
+        security: [{ adminSession: [] }],
         parameters: [
           {
             name: 'status',
             in: 'query',
-            schema: { type: 'string', enum: ['pending', 'completed', 'expired', 'all'], default: 'pending' },
+            schema: {
+              type: 'string',
+              enum: ['pending', 'completed', 'expired', 'all'],
+              default: 'pending',
+            },
           },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 100 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
         responses: {
           '200': { description: 'Request list' },
-          '401': { description: 'Missing or invalid admin secret' },
+          '401': { description: 'Missing or invalid admin session' },
         },
       },
     },
@@ -78,7 +82,8 @@ const spec = {
       get: {
         operationId: 'pollRequest',
         summary: 'Poll request status',
-        description: 'Check whether the human has responded. Returns only the minimal agent-facing status payload.',
+        description:
+          'Check whether the human has responded. Returns only the minimal agent-facing status payload.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
           '200': {
@@ -102,7 +107,7 @@ const spec = {
       patch: {
         operationId: 'submitResponse',
         summary: 'Submit human response',
-        description: 'Called from the review page when a human selects a choice. No auth required.',
+        description: 'Called from the review page when a human selects a choice. Requires x-review-token.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         requestBody: {
           required: true,
@@ -115,7 +120,7 @@ const spec = {
         responses: {
           '200': { description: 'Response submitted' },
           '400': { description: 'Invalid choice' },
-          '404': { description: 'Request not found' },
+          '404': { description: 'Request not found or review token invalid' },
           '409': { description: 'Already completed' },
           '410': { description: 'Request expired' },
         },
@@ -141,11 +146,11 @@ const spec = {
       get: {
         operationId: 'getReviewRequest',
         summary: 'Fetch full request details for the human review page',
-        description: 'Returns the full request payload, choices, and agent metadata for the magic-link review experience.',
+        description: 'Returns the full request payload when a valid x-review-token header is supplied.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
           '200': { description: 'Full review request payload' },
-          '404': { description: 'Request not found' },
+          '404': { description: 'Request not found or review token invalid' },
         },
       },
     },
@@ -178,7 +183,7 @@ const spec = {
   components: {
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer' },
-      adminSecret: { type: 'apiKey', in: 'header', name: 'x-admin-secret' },
+      adminSession: { type: 'apiKey', in: 'cookie', name: 'hitl_admin_session' },
     },
     schemas: {
       Choice: {
@@ -198,7 +203,11 @@ const spec = {
           content: { type: 'string', description: 'Content for human review (max 50KB)' },
           content_type: { type: 'string', enum: ['text', 'markdown', 'html', 'image'], default: 'text' },
           choices: { type: 'array', items: { $ref: '#/components/schemas/Choice' }, minItems: 2, maxItems: 4 },
-          callback_url: { type: 'string', format: 'uri', description: 'Public HTTPS webhook URL' },
+          callback_url: {
+            type: 'string',
+            format: 'uri',
+            description: 'HTTPS webhook URL whose hostname is explicitly allowlisted by the operator',
+          },
           metadata: { type: 'object', description: 'Passed through to webhook (max 10KB)' },
           decision_reason: { type: 'string', maxLength: 500 },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -222,7 +231,11 @@ const spec = {
         properties: {
           id: { type: 'string', format: 'uuid' },
           status: { type: 'string', enum: ['pending'] },
-          review_url: { type: 'string', format: 'uri' },
+          review_url: {
+            type: 'string',
+            format: 'uri',
+            description: 'Opaque human review URL that already includes the review token query parameter',
+          },
           poll_url: { type: 'string' },
           expires_at: { type: 'string', format: 'date-time' },
         },

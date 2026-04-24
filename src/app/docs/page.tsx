@@ -23,7 +23,7 @@ const createResponseExample = `{
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.run/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid?token=opaque-review-token",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-07T19:00:00.000Z"
   }
@@ -128,7 +128,7 @@ export default function DocsPage() {
                   <FieldRow name="recommended_option" desc="Optional choice id the agent currently recommends" />
                   <FieldRow name="run_id" desc="Optional workflow run identifier" />
                   <FieldRow name="trace_id" desc="Optional trace identifier" />
-                  <FieldRow name="callback_url" desc="Public HTTPS webhook URL for async completion" />
+                  <FieldRow name="callback_url" desc="Allowlisted HTTPS webhook URL for async completion" />
                   <FieldRow name="metadata" desc="Arbitrary JSON echoed back in the webhook" />
                   <FieldRow name="timeout_seconds" desc="Request expiry in seconds, max 86400" />
                 </tbody>

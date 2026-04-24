@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { HitlRequest, ContentType } from '@/types';
 
 type ViewState = 'loading' | 'pending' | 'completed' | 'expired' | 'not_found';
@@ -44,13 +44,14 @@ function ContentRenderer({ content, contentType }: { content: string; contentTyp
       );
     }
     case 'markdown': {
-      // Basic markdown: bold, italic, code, line breaks
-      // Escape HTML first to prevent XSS, then apply markdown replacements
       const safe = escHtml(content);
       const rendered = safe
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code class="bg-hitl-surface-hover px-1 py-0.5 rounded text-xs font-mono">$1</code>')
+        .replace(
+          /`(.+?)`/g,
+          '<code class="bg-hitl-surface-hover px-1 py-0.5 rounded text-xs font-mono">$1</code>'
+        )
         .replace(/\n/g, '<br/>');
       return (
         <div
@@ -70,6 +71,8 @@ function ContentRenderer({ content, contentType }: { content: string; contentTyp
 
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const reviewToken = searchParams.get('token');
   const [request, setRequest] = useState<HitlRequest | null>(null);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
@@ -78,8 +81,15 @@ export default function ReviewPage() {
 
   useEffect(() => {
     async function fetchRequest() {
+      if (!reviewToken) {
+        setViewState('not_found');
+        return;
+      }
+
       try {
-        const res = await fetch(`/api/review/${id}`);
+        const res = await fetch(`/api/review/${id}`, {
+          headers: { 'x-review-token': reviewToken },
+        });
         const json = await res.json();
         if (json.success && json.data) {
           setRequest(json.data);
@@ -91,22 +101,31 @@ export default function ReviewPage() {
         setViewState('not_found');
       }
     }
-    fetchRequest();
-  }, [id]);
+    void fetchRequest();
+  }, [id, reviewToken]);
 
   const handleSubmit = async () => {
-    if (!selectedChoice || submitting) return;
+    if (!selectedChoice || submitting || !reviewToken) return;
     setSubmitting(true);
     try {
       const res = await fetch(`/api/requests/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-review-token': reviewToken,
+        },
         body: JSON.stringify({ selected_option: selectedChoice }),
       });
       const json = await res.json();
       if (json.success) {
         setSubmitted(true);
         setViewState('completed');
+      } else if (res.status === 409) {
+        setViewState('completed');
+      } else if (res.status === 410) {
+        setViewState('expired');
+      } else if (res.status === 404) {
+        setViewState('not_found');
       }
     } catch {
       // Allow retry
@@ -131,7 +150,7 @@ export default function ReviewPage() {
         <div className="text-center max-w-sm">
           <p className="text-lg font-medium text-hitl-text mb-2">Dispatch not found</p>
           <p className="text-sm text-hitl-text-muted">
-            This request ID does not exist or has been removed.
+            This review link is invalid, missing its token, or has been removed.
           </p>
         </div>
       </main>
@@ -158,33 +177,44 @@ export default function ReviewPage() {
       <main className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <div className="w-12 h-12 rounded-full bg-hitl-approve-soft flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-hitl-approve" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg
+              className="w-6 h-6 text-hitl-approve"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <p className="text-lg font-medium text-hitl-text mb-2">Response transmitted</p>
           <p className="text-sm text-hitl-text-muted">
-            {submitted ? 'Your selection has been dispatched to the requesting agent.' : 'This request has already been resolved.'}
+            {submitted
+              ? 'Your selection has been dispatched to the requesting agent.'
+              : 'This request has already been resolved.'}
           </p>
         </div>
       </main>
     );
   }
 
-  // Pending state — show review UI
   const metadata = (request?.metadata || {}) as Record<string, unknown>;
   const agentCtx = (metadata._agent as Record<string, unknown>) ?? metadata;
-  const recommendedOption = typeof agentCtx.recommended_option === 'string' ? agentCtx.recommended_option : null;
+  const recommendedOption =
+    typeof agentCtx.recommended_option === 'string' ? agentCtx.recommended_option : null;
   const confidence = typeof agentCtx.confidence === 'number' ? agentCtx.confidence : null;
-  const decisionReason = typeof agentCtx.decision_reason === 'string' ? agentCtx.decision_reason : null;
-  const consequence = typeof agentCtx.consequence_of_wrong_choice === 'string' ? agentCtx.consequence_of_wrong_choice : null;
+  const decisionReason =
+    typeof agentCtx.decision_reason === 'string' ? agentCtx.decision_reason : null;
+  const consequence =
+    typeof agentCtx.consequence_of_wrong_choice === 'string'
+      ? agentCtx.consequence_of_wrong_choice
+      : null;
   const runId = typeof agentCtx.run_id === 'string' ? agentCtx.run_id : null;
   const traceId = typeof agentCtx.trace_id === 'string' ? agentCtx.trace_id : null;
 
   return (
     <main className="min-h-screen px-4 py-8 sm:py-12">
       <div className="max-w-lg mx-auto">
-        {/* Header */}
         <div className="mb-6">
           <p className="label-tracked mb-2">dispatch from</p>
           <p className="text-sm font-mono text-hitl-text-secondary mb-4">{request?.agent_name}</p>
@@ -199,39 +229,57 @@ export default function ReviewPage() {
             <div className="grid gap-3">
               {decisionReason && (
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">why this was escalated</p>
-                  <p className="text-sm text-hitl-text-secondary leading-relaxed">{decisionReason}</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                    why this was escalated
+                  </p>
+                  <p className="text-sm text-hitl-text-secondary leading-relaxed">
+                    {decisionReason}
+                  </p>
                 </div>
               )}
               {consequence && (
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">if this goes wrong</p>
-                  <p className="text-sm text-hitl-text-secondary leading-relaxed">{consequence}</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                    if this goes wrong
+                  </p>
+                  <p className="text-sm text-hitl-text-secondary leading-relaxed">
+                    {consequence}
+                  </p>
                 </div>
               )}
               {(confidence !== null || recommendedOption || runId || traceId) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {confidence !== null && (
                     <div className="rounded border border-hitl-border px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">agent confidence</p>
-                      <p className="text-sm font-mono text-hitl-text">{Math.round(confidence * 100)}%</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                        agent confidence
+                      </p>
+                      <p className="text-sm font-mono text-hitl-text">
+                        {Math.round(confidence * 100)}%
+                      </p>
                     </div>
                   )}
                   {recommendedOption && (
                     <div className="rounded border border-hitl-border px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">agent recommendation</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                        agent recommendation
+                      </p>
                       <p className="text-sm font-mono text-hitl-text">{recommendedOption}</p>
                     </div>
                   )}
                   {runId && (
                     <div className="rounded border border-hitl-border px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">run id</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                        run id
+                      </p>
                       <p className="text-sm font-mono text-hitl-text break-all">{runId}</p>
                     </div>
                   )}
                   {traceId && (
                     <div className="rounded border border-hitl-border px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">trace id</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-hitl-text-muted mb-1">
+                        trace id
+                      </p>
                       <p className="text-sm font-mono text-hitl-text break-all">{traceId}</p>
                     </div>
                   )}
@@ -241,7 +289,6 @@ export default function ReviewPage() {
           </div>
         )}
 
-        {/* Content */}
         {request?.content && (
           <div className="bg-hitl-surface rounded border border-hitl-border p-4 sm:p-5 mb-6">
             <ContentRenderer
@@ -251,7 +298,6 @@ export default function ReviewPage() {
           </div>
         )}
 
-        {/* Choices */}
         <div className="mb-6">
           <p className="label-tracked mb-3">select one</p>
           <div className="grid gap-2">
@@ -264,8 +310,8 @@ export default function ReviewPage() {
                     ? 'border-hitl-accent bg-hitl-accent-soft/30'
                     : 'border-hitl-border bg-hitl-surface hover:border-hitl-border-hover'
                 }`}
-                >
-                  <div className="flex items-center gap-3">
+              >
+                <div className="flex items-center gap-3">
                   <div
                     className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                       selectedChoice === choice.id
@@ -291,7 +337,6 @@ export default function ReviewPage() {
           </div>
         </div>
 
-        {/* Submit */}
         <button
           disabled={!selectedChoice || submitting}
           onClick={handleSubmit}
@@ -300,7 +345,6 @@ export default function ReviewPage() {
           {submitting ? 'Transmitting...' : 'Transmit selection'}
         </button>
 
-        {/* Footer */}
         <p className="text-center text-xs text-hitl-text-muted mt-8">
           Powered by <span className="font-medium text-hitl-text-secondary">MEATSPACE</span>
         </p>

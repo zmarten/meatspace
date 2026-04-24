@@ -47,7 +47,7 @@ Response:
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.run/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid?token=opaque-review-token",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-07T19:00:00.000Z"
   }
@@ -94,6 +94,8 @@ If `callback_url` is set, MeatSpace sends:
 }
 ```
 
+`callback_url` must be an `https://` URL whose hostname is explicitly allowlisted by the MeatSpace operator.
+
 Headers:
 
 - `X-HITL-Timestamp`
@@ -121,7 +123,7 @@ Returns service health plus capability and escalation guidance for agents.
 ```json
 {
   "success": false,
-  "error": "callback_url must be a public HTTPS URL",
-  "code": "callback_url_not_https"
+  "error": "callback_url must use https and match an allowlisted webhook host",
+  "code": "callback_url_not_allowed"
 }
 ```

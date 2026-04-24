@@ -1,80 +1,56 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HitlRequest, RequestStatus } from '@/types';
-
-const isMockMode =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.startsWith('mock-') ||
-  process.env.USE_MOCK === 'true';
-
-let supabase: any = null;
-function getSupabase() {
-  if (!supabase && !isMockMode) {
-    const { createClient } = require('@supabase/supabase-js');
-    supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-  }
-  return supabase;
-}
 
 export function useRequests(statusFilter: RequestStatus | 'all' = 'pending') {
   const [requests, setRequests] = useState<HitlRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const channelRef = useRef<any>(null);
-
-  const fetchRequests = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ status: statusFilter, limit: '100' });
-      const res = await globalThis.fetch(`/api/requests?${params}`, {
-        headers: { 'x-admin-secret': process.env.NEXT_PUBLIC_ADMIN_SECRET || '' },
-      });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setRequests(json.data as HitlRequest[]);
-      }
-    } catch (err) {
-      console.error('Failed to fetch requests:', err);
-    }
-    setLoading(false);
-  }, [statusFilter]);
+  const [unauthorized, setUnauthorized] = useState(false);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetchRequests();
+    let cancelled = false;
 
-    if (isMockMode) {
-      const interval = setInterval(fetchRequests, 3000);
-      return () => clearInterval(interval);
+    async function fetchRequests() {
+      try {
+        const params = new URLSearchParams({ status: statusFilter, limit: '100' });
+        const res = await globalThis.fetch(`/api/requests?${params}`, {
+          credentials: 'same-origin',
+        });
+
+        if (res.status === 401) {
+          if (!cancelled) {
+            setUnauthorized(true);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const json = await res.json();
+        if (!cancelled && json.success && json.data) {
+          setRequests(json.data as HitlRequest[]);
+          setUnauthorized(false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch requests:', err);
+      }
+
+      if (!cancelled) setLoading(false);
     }
 
-    const client = getSupabase();
-    if (client) {
-      const channelName = statusFilter === 'all' ? 'hitl-requests' : `hitl-requests-${statusFilter}`;
-      const filter = statusFilter !== 'all' ? `status=eq.${statusFilter}` : undefined;
-      channelRef.current = client
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'hitl_requests', ...(filter ? { filter } : {}) },
-          () => fetchRequests()
-        )
-        .subscribe();
-    }
+    void fetchRequests();
+    intervalRef.current = window.setInterval(() => {
+      void fetchRequests();
+    }, 5000);
 
     return () => {
-      channelRef.current?.unsubscribe();
+      cancelled = true;
+      if (intervalRef.current !== null) {
+        window.clearInterval(intervalRef.current);
+      }
     };
-  }, [fetchRequests]);
+  }, [statusFilter]);
 
-  return { requests, loading, refetch: fetchRequests };
-}
-
-export async function submitResponse(id: string, selectedOption: string) {
-  const res = await fetch(`/api/requests/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ selected_option: selectedOption }),
-  });
-  return res.json();
+  return { requests, loading, unauthorized };
 }

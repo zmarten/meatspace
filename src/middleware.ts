@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateApiKey, timingSafeCompare } from '@/lib/auth';
+import { validateAdminSession, validateApiKey } from '@/lib/auth';
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method;
 
-  // POST /api/requests — agent creates a request (Bearer token)
   if (pathname === '/api/requests' && method === 'POST') {
     const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
     if (!bearerToken || !validateApiKey(bearerToken)) {
@@ -16,25 +15,32 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // GET /api/requests — list all requests (admin secret)
   if (pathname === '/api/requests' && method === 'GET') {
-    const secret = req.headers.get('x-admin-secret') || '';
-    const expected = process.env.ADMIN_SECRET || '';
-    if (!secret || !expected || !timingSafeCompare(secret, expected)) {
+    const session = req.cookies.get('hitl_admin_session')?.value;
+    if (!(await validateAdminSession(session))) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized: missing or invalid x-admin-secret header' },
+        { success: false, error: 'Unauthorized: admin session required' },
         { status: 401 }
       );
     }
   }
 
-  // POST /api/mcp — MCP tool calls (auth handled in route itself)
-  // GET/PATCH /api/requests/[id] — no auth (magic link pattern)
-  // GET /api/requests/[id]/wait — no auth
+  if (pathname.startsWith('/dashboard')) {
+    const isLoginPage = pathname === '/dashboard/login';
+    const hasValidSession = await validateAdminSession(req.cookies.get('hitl_admin_session')?.value);
+
+    if (!hasValidSession && !isLoginPage) {
+      return NextResponse.redirect(new URL('/dashboard/login', req.url));
+    }
+
+    if (hasValidSession && isLoginPage) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+  }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/api/requests/:path*', '/api/mcp/:path*'],
+  matcher: ['/api/requests/:path*', '/api/mcp/:path*', '/dashboard/:path*'],
 };

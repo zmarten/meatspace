@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('hitl_requests')
-    .select('*')
+    .select(
+      'id, agent_name, title, content, content_type, choices, callback_url, metadata, status, selected, responded_at, expires_at, created_at, updated_at'
+    )
     .order('created_at', { ascending: false })
     .limit(limit)
     .range(offset, offset + limit - 1);

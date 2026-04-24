@@ -1,37 +1,38 @@
 /**
  * In-memory mock data store for local MVP development.
- * Replaces Supabase — no external services needed.
+ * Replaces Supabase â€” no external services needed.
  * Resets every time the dev server restarts.
  */
 
-// Web Crypto globals used — no Node.js crypto import needed in Edge runtime
+// Web Crypto globals used â€” no Node.js crypto import needed in Edge runtime
 
 function hashApiKey(key: string): string {
-  // Mock-mode only — not security sensitive, btoa is sufficient
   return btoa(key);
 }
 
-// ─── Types for internal rows ───
+function hashReviewToken(token: string): string {
+  const values: Record<string, string> = {
+    'mock-review-token-1': '68b4240b765203ada29a2d2a5fd135a93a9cb1ad766f9c727d1c31d0bbe9215f',
+    'mock-review-token-2': '34a703c300307e81f129aebba85bd2c3a6476b5c7d0fcab223c2a14228b0776f',
+    'mock-review-token-3': '91e76f9daa1987671e890c84e46d91ee2246de9cdb9646ca20f4c76db6abdbf8',
+  };
+  return values[token] || btoa(token);
+}
 
 interface DbRow {
   [key: string]: any;
 }
-
-// ─── The store ───
 
 const store: Record<string, DbRow[]> = {
   hitl_requests: [],
   hitl_api_keys: [],
 };
 
-// ─── Seed data ───
-
 function seed() {
   const now = new Date().toISOString();
   const fiveMinAgo = new Date(Date.now() - 5 * 60000).toISOString();
   const tenMinAgo = new Date(Date.now() - 10 * 60000).toISOString();
 
-  // Default API key (the raw key is "hitl_mock-dev-key-for-local-testing")
   const mockRawKey = 'hitl_mock-dev-key-for-local-testing';
   store.hitl_api_keys = [
     {
@@ -46,14 +47,13 @@ function seed() {
     },
   ];
 
-  // ─── Sample requests (new MVP schema) ───
-
   store.hitl_requests = [
     {
       id: crypto.randomUUID(),
       agent_name: 'design-agent',
       title: 'Which hero layout for the landing page?',
-      content: '<h2>Campaign Landing Page</h2><p>Three layout variants for the Q2 campaign. Each uses the same copy but different visual hierarchies.</p>',
+      content:
+        '<h2>Campaign Landing Page</h2><p>Three layout variants for the Q2 campaign. Each uses the same copy but different visual hierarchies.</p>',
       content_type: 'html',
       choices: [
         { id: 'a', label: 'Left-aligned hero' },
@@ -61,6 +61,7 @@ function seed() {
         { id: 'c', label: 'Split-screen' },
       ],
       callback_url: null,
+      review_token_hash: hashReviewToken('mock-review-token-1'),
       metadata: { campaign: 'q2-2025' },
       status: 'pending',
       selected: null,
@@ -73,7 +74,8 @@ function seed() {
       id: crypto.randomUUID(),
       agent_name: 'content-writer',
       title: 'Which tagline should we use?',
-      content: 'We need a tagline for the product launch email. The audience is technical founders.',
+      content:
+        'We need a tagline for the product launch email. The audience is technical founders.',
       content_type: 'text',
       choices: [
         { id: 'opt-1', label: 'Ship faster with less friction' },
@@ -82,6 +84,7 @@ function seed() {
         { id: 'opt-4', label: 'Less config, more code' },
       ],
       callback_url: null,
+      review_token_hash: hashReviewToken('mock-review-token-2'),
       metadata: {},
       status: 'pending',
       selected: null,
@@ -90,7 +93,6 @@ function seed() {
       created_at: tenMinAgo,
       updated_at: tenMinAgo,
     },
-    // One completed request
     {
       id: crypto.randomUUID(),
       agent_name: 'deploy-bot',
@@ -98,11 +100,12 @@ function seed() {
       content: 'Release v2.3.0 is ready. Choose the rollout strategy.',
       content_type: 'text',
       choices: [
-        { id: 'canary', label: 'Canary (10% → 50% → 100%)' },
+        { id: 'canary', label: 'Canary (10% â†’ 50% â†’ 100%)' },
         { id: 'blue-green', label: 'Blue-green cutover' },
         { id: 'rolling', label: 'Rolling update' },
       ],
       callback_url: null,
+      review_token_hash: hashReviewToken('mock-review-token-3'),
       metadata: { version: '2.3.0' },
       status: 'completed',
       selected: 'canary',
@@ -114,10 +117,7 @@ function seed() {
   ];
 }
 
-// Seed on first import
 seed();
-
-// ─── Store access functions ───
 
 export function getTable(tableName: string): DbRow[] {
   if (!store[tableName]) {

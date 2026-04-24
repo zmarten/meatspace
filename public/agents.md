@@ -1,4 +1,4 @@
-# MeatSpace — Agent Integration Guide
+# MeatSpace â€” Agent Integration Guide
 
 MeatSpace is a human-in-the-loop service for AI agents. When your agent faces a subjective, high-stakes, or ambiguous decision, MeatSpace routes it to a human who selects one of 2-4 options and returns a structured result.
 
@@ -60,8 +60,8 @@ MeatSpace implements MCP (Model Context Protocol) with Streamable HTTP transport
 **Discovery:** `GET /.well-known/mcp.json`
 
 **Tools:**
-- `get_service_status` — Check availability and get escalation guidance
-- `ask_human` — Submit a decision to a human reviewer
+- `get_service_status` â€” Check availability and get escalation guidance
+- `ask_human` â€” Submit a decision to a human reviewer
 
 ### Claude Code Configuration
 
@@ -119,21 +119,21 @@ The tool long-polls for up to 20 seconds. If the human hasn't responded, it retu
 **Headers:** `Authorization: Bearer <token>`, `Content-Type: application/json`
 
 **Required fields:**
-- `agent_name` (string, max 100) — Your agent's name
-- `title` (string, max 200) — What the human is deciding
-- `choices` (array, 2-4 items) — Each with `id` (max 50) and `label` (max 100)
+- `agent_name` (string, max 100) â€” Your agent's name
+- `title` (string, max 200) â€” What the human is deciding
+- `choices` (array, 2-4 items) â€” Each with `id` (max 50) and `label` (max 100)
 
 **Optional fields:**
-- `content` (string, max 50KB) — Review material for the human
-- `content_type` — `text` (default), `markdown`, `html`, or `image`
-- `decision_reason` (max 500) — Why you're escalating
-- `confidence` (0-1) — Your confidence level
-- `consequence_of_wrong_choice` (max 500) — Stakes of a bad pick
-- `recommended_option` — Choice `id` you'd recommend
-- `callback_url` — HTTPS webhook for async notification
-- `metadata` — Arbitrary JSON passed through to webhook
-- `run_id`, `trace_id` — For workflow tracing
-- `timeout_seconds` (default 3600, max 86400) — When the request expires
+- `content` (string, max 50KB) â€” Review material for the human
+- `content_type` â€” `text` (default), `markdown`, `html`, or `image`
+- `decision_reason` (max 500) â€” Why you're escalating
+- `confidence` (0-1) â€” Your confidence level
+- `consequence_of_wrong_choice` (max 500) â€” Stakes of a bad pick
+- `recommended_option` â€” Choice `id` you'd recommend
+- `callback_url` â€” Allowlisted HTTPS webhook for async notification
+- `metadata` â€” Arbitrary JSON passed through to webhook
+- `run_id`, `trace_id` â€” For workflow tracing
+- `timeout_seconds` (default 3600, max 86400) â€” When the request expires
 
 **Response:**
 ```json
@@ -142,7 +142,7 @@ The tool long-polls for up to 20 seconds. If the human hasn't responded, it retu
   "data": {
     "id": "uuid",
     "status": "pending",
-    "review_url": "https://meatspace.run/review/uuid",
+    "review_url": "https://meatspace.run/review/uuid?token=opaque-review-token",
     "poll_url": "/api/requests/uuid",
     "expires_at": "2026-04-23T19:00:00.000Z"
   }
@@ -186,6 +186,8 @@ If `callback_url` is set, MeatSpace POSTs the result when the human responds:
 }
 ```
 
+`callback_url` must be an `https://` URL whose hostname is explicitly allowlisted by the operator.
+
 Signed with `X-HITL-Timestamp` and `X-HITL-Signature` headers.
 
 ---
@@ -217,7 +219,7 @@ All errors return:
 }
 ```
 
-Common codes: `agent_name_required`, `invalid_choice_count`, `content_too_large`, `callback_url_not_https`, `request_create_failed`.
+Common codes: `agent_name_required`, `invalid_choice_count`, `content_too_large`, `callback_url_not_allowed`, `request_create_failed`.
 
 ---
 
@@ -225,9 +227,9 @@ Common codes: `agent_name_required`, `invalid_choice_count`, `content_too_large`
 
 1. **Be specific in your title.** "Which deploy strategy?" beats "Help me decide."
 2. **Include context in content.** Give the human what they need to decide quickly.
-3. **Use `decision_reason`** to explain why you're escalating — it's shown to the reviewer.
+3. **Use `decision_reason`** to explain why you're escalating â€” it's shown to the reviewer.
 4. **Set `confidence`** so the human knows how uncertain you are.
-5. **Use `recommended_option`** when you have a lean — the reviewer sees it as a suggestion.
+5. **Use `recommended_option`** when you have a lean â€” the reviewer sees it as a suggestion.
 6. **Keep choices to 2-3** when possible. Four max.
 7. **Set a reasonable timeout.** Default is 1 hour. Don't set 24h unless the decision can genuinely wait.
 8. **Use webhooks for async flows.** Don't long-poll if your agent can continue other work.

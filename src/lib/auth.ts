@@ -1,9 +1,48 @@
-// Use Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
+// Use Web Crypto globals â€” Edge runtime does not allow `import ... from 'crypto'`
+
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const encoder = new TextEncoder();
+
+function encodeUtf8(value: string) {
+  return encoder.encode(value);
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function textToBase64Url(value: string): string {
+  return bytesToBase64Url(encodeUtf8(value));
+}
+
+function base64UrlToText(value: string): string | null {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  try {
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+async function signValue(value: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encodeUtf8(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encodeUtf8(value));
+  return bytesToBase64Url(new Uint8Array(signature));
+}
 
 /** Constant-time string comparison to prevent timing attacks. */
 export function timingSafeCompare(a: string, b: string): boolean {
-  const aBuf = new TextEncoder().encode(a);
-  const bBuf = new TextEncoder().encode(b);
+  const aBuf = encodeUtf8(a);
+  const bBuf = encodeUtf8(b);
   if (aBuf.length !== bBuf.length) return false;
   let result = 0;
   for (let i = 0; i < aBuf.length; i++) result |= aBuf[i] ^ bBuf[i];
@@ -13,29 +52,81 @@ export function timingSafeCompare(a: string, b: string): boolean {
 export function generateApiKey(): string {
   const bytes = new Uint8Array(30);
   crypto.getRandomValues(bytes);
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return 'hitl_' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return 'hitl_' + bytesToBase64Url(bytes);
+}
+
+export function generateReviewToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return bytesToBase64Url(bytes);
+}
+
+export async function hashReviewToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', encodeUtf8(token));
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function reviewTokenMatches(
+  token: string | null | undefined,
+  tokenHash: string | null | undefined
+) {
+  if (!token || !tokenHash) return false;
+  const computedHash = await hashReviewToken(token);
+  return timingSafeCompare(computedHash, tokenHash);
+}
+
+export function getAllowedWebhookHosts(): string[] {
+  const raw = process.env.WEBHOOK_ALLOWED_HOSTS || '';
+  return raw
+    .split(',')
+    .map(host => host.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function isAllowedCallbackUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return false;
-    const host = parsed.hostname;
-    // IPv4 private/loopback ranges
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false;
-    if (host.startsWith('10.')) return false;
-    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return false;
-    if (host.startsWith('192.168.')) return false;
-    if (host.startsWith('169.254.')) return false;
-    // IPv6 loopback and private ranges
-    if (host === '::1') return false;
-    if (host.startsWith('fd')) return false; // fd00::/8 ULA range
-    if (host.startsWith('::ffff:127.') || host.startsWith('::ffff:0:127.')) return false; // ::ffff: loopback
-    // Bracketed IPv6 forms in the raw URL string
-    if (url.includes('[::1]')) return false;
-    return true;
+    const allowedHosts = getAllowedWebhookHosts();
+    if (allowedHosts.length === 0) return false;
+    return allowedHosts.includes(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export async function createAdminSessionValue(): Promise<string | null> {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (!secret) return null;
+
+  const payload = textToBase64Url(
+    JSON.stringify({
+      exp: Date.now() + ADMIN_SESSION_TTL_MS,
+      v: 1,
+    })
+  );
+  const signature = await signValue(payload, secret);
+  return `${payload}.${signature}`;
+}
+
+export async function validateAdminSession(sessionValue: string | undefined | null): Promise<boolean> {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (!sessionValue || !secret) return false;
+
+  const [payload, signature] = sessionValue.split('.');
+  if (!payload || !signature) return false;
+
+  const expectedSignature = await signValue(payload, secret);
+  if (!timingSafeCompare(signature, expectedSignature)) return false;
+
+  const decoded = base64UrlToText(payload);
+  if (!decoded) return false;
+
+  try {
+    const parsed = JSON.parse(decoded) as { exp?: number };
+    return typeof parsed.exp === 'number' && parsed.exp > Date.now();
   } catch {
     return false;
   }
@@ -43,13 +134,12 @@ export function isAllowedCallbackUrl(url: string): boolean {
 
 /**
  * Validate a Bearer token against the HITL_API_KEY env var using timing-safe comparison.
- * In mock mode, also accepts the hardcoded dev key — but never in production.
+ * In mock mode, also accepts the hardcoded dev key â€” but never in production.
  */
 export function validateApiKey(bearerToken: string): boolean {
   const envKey = process.env.HITL_API_KEY;
   if (envKey && timingSafeCompare(bearerToken, envKey)) return true;
 
-  // Mock mode: accept the dev key only outside production
   if (process.env.NODE_ENV !== 'production' && process.env.USE_MOCK === 'true') {
     if (timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) return true;
   }
