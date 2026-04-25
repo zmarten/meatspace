@@ -7,7 +7,7 @@ import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
 
 export async function POST(req: NextRequest) {
-  const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
+  const bearerToken = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
   if (!bearerToken) {
     return NextResponse.json(
       { success: false, error: 'Unauthorized: valid Bearer token required' },

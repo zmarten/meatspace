@@ -9,7 +9,7 @@ export async function middleware(req: NextRequest) {
   // Full async DB-backed key validation happens in the route handler.
   if (pathname === '/api/requests' && method === 'POST') {
     const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader || !/^bearer\s/i.test(authHeader)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Bearer token required' },
         { status: 401 }

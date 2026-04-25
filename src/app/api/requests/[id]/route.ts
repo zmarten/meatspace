@@ -1,9 +1,16 @@
 export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { reviewTokenMatches } from '@/lib/auth';
+import { reviewTokenMatches, authorizeRequestAccess } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase';
 import { isAllowedCallbackUrl } from '@/lib/auth';
+
+function extractBearer(req: NextRequest): string | null {
+  const header = req.headers.get('authorization');
+  if (!header) return null;
+  const match = header.match(/^bearer\s+(.+)$/i);
+  return match ? match[1] : null;
+}
 import { deliverWebhook } from '@/lib/webhooks';
 import { toPollResponse } from '@/lib/request-contract';
 
@@ -16,7 +23,7 @@ async function getAuthorizedReviewRequest(req: NextRequest, id: string) {
   const supabase = await createServiceClient();
   const { data: request, error } = await supabase
     .from('hitl_requests')
-    .select('*')
+    .select('id, agent_name, title, content, content_type, choices, callback_url, metadata, status, selected, responded_at, expires_at, review_token_hash')
     .eq('id', id)
     .single();
 
@@ -33,15 +40,30 @@ async function getAuthorizedReviewRequest(req: NextRequest, id: string) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  const bearerToken = extractBearer(req);
+  const reviewToken = req.headers.get('x-review-token');
+  if (!bearerToken && !reviewToken) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: Bearer token or x-review-token required' },
+      { status: 401 }
+    );
+  }
+
+  const authorized = await authorizeRequestAccess(id, bearerToken, reviewToken);
+  if (!authorized) {
+    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+  }
+
   const supabase = await createServiceClient();
 
   const { data, error } = await supabase
     .from('hitl_requests')
-    .select('*')
+    .select('id, status, selected, responded_at, expires_at, choices')
     .eq('id', id)
     .single();
 

@@ -154,19 +154,21 @@ export async function createHitlRequest(params: {
     return fail('Failed to create request', 'request_create_failed', 500);
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const reviewUrl = `${appUrl}/review/${data.id}?token=${reviewToken}`;
+
   await sendNotification({
     id: data.id,
     title: data.title,
     agent_name: data.agent_name,
     choices: data.choices,
-  });
+  }, reviewUrl);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
   return {
     data: {
       id: data.id,
       status: data.status,
-      review_url: `${appUrl}/review/${data.id}?token=${reviewToken}`,
+      review_url: reviewUrl,
       poll_url: `/api/requests/${data.id}`,
       expires_at: data.expires_at,
     },

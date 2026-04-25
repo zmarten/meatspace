@@ -3,6 +3,23 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminSessionValue, timingSafeCompare } from '@/lib/auth';
 
+const LOGIN_RATE_LIMIT = 5; // max attempts per IP per window
+const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function checkLoginRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= LOGIN_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 function sessionCookieOptions() {
   return {
     httpOnly: true,
@@ -14,6 +31,14 @@ function sessionCookieOptions() {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!checkLoginRateLimit(ip)) {
+    return NextResponse.json(
+      { success: false, error: 'Too many login attempts. Try again later.' },
+      { status: 429 }
+    );
+  }
+
   const expected = process.env.ADMIN_SECRET || '';
   if (!expected) {
     return NextResponse.json(
@@ -33,7 +58,7 @@ export async function POST(req: NextRequest) {
   }
 
   const provided = body.secret || '';
-  if (!provided || !timingSafeCompare(provided, expected)) {
+  if (!provided || !(await timingSafeCompare(provided, expected))) {
     return NextResponse.json(
       { success: false, error: 'Invalid admin secret' },
       { status: 401 }

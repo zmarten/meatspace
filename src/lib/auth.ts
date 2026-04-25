@@ -39,11 +39,16 @@ async function signValue(value: string, secret: string): Promise<string> {
   return bytesToBase64Url(new Uint8Array(signature));
 }
 
-/** Constant-time string comparison to prevent timing attacks. */
-export function timingSafeCompare(a: string, b: string): boolean {
-  const aBuf = encodeUtf8(a);
-  const bBuf = encodeUtf8(b);
-  if (aBuf.length !== bBuf.length) return false;
+/** Constant-time string comparison to prevent timing attacks.
+ *  Hashes both inputs with SHA-256 so comparison time is always
+ *  fixed-length regardless of input lengths — no length oracle. */
+export async function timingSafeCompare(a: string, b: string): Promise<boolean> {
+  const [aHash, bHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encodeUtf8(a)),
+    crypto.subtle.digest('SHA-256', encodeUtf8(b)),
+  ]);
+  const aBuf = new Uint8Array(aHash);
+  const bBuf = new Uint8Array(bHash);
   let result = 0;
   for (let i = 0; i < aBuf.length; i++) result |= aBuf[i] ^ bBuf[i];
   return result === 0;
@@ -81,7 +86,7 @@ export async function reviewTokenMatches(
 ) {
   if (!token || !tokenHash) return false;
   const computedHash = await hashReviewToken(token);
-  return timingSafeCompare(computedHash, tokenHash);
+  return await timingSafeCompare(computedHash, tokenHash);
 }
 
 export function getAllowedWebhookHosts(): string[] {
@@ -126,7 +131,7 @@ export async function validateAdminSession(sessionValue: string | undefined | nu
   if (!payload || !signature) return false;
 
   const expectedSignature = await signValue(payload, secret);
-  if (!timingSafeCompare(signature, expectedSignature)) return false;
+  if (!(await timingSafeCompare(signature, expectedSignature))) return false;
 
   const decoded = base64UrlToText(payload);
   if (!decoded) return false;
@@ -137,6 +142,39 @@ export async function validateAdminSession(sessionValue: string | undefined | nu
   } catch {
     return false;
   }
+}
+
+/**
+ * Verify a request is authorized to read a specific hitl_request.
+ * Accepts either a Bearer API key or an x-review-token that matches the request's hash.
+ */
+export async function authorizeRequestAccess(
+  requestId: string,
+  bearerToken: string | null,
+  reviewToken: string | null,
+): Promise<boolean> {
+  // Bearer API key — validates the key is active (doesn't check ownership of the specific request)
+  if (bearerToken) {
+    const auth = await validateApiKey(bearerToken);
+    if (auth.valid) return true;
+  }
+
+  // Review token — must match the specific request's review_token_hash
+  if (reviewToken) {
+    const { createServiceClient } = await import('./supabase');
+    const supabase = await createServiceClient();
+    const { data } = await supabase
+      .from('hitl_requests')
+      .select('review_token_hash')
+      .eq('id', requestId)
+      .single();
+
+    if (data) {
+      return reviewTokenMatches(reviewToken, data.review_token_hash);
+    }
+  }
+
+  return false;
 }
 
 export interface ApiKeyValidationResult {
@@ -155,7 +193,7 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidat
 
   // Mock dev key — synchronous check before any DB call
   if (process.env.NODE_ENV !== 'production' && process.env.USE_MOCK === 'true') {
-    if (timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) {
+    if (await timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) {
       return { valid: true, keyId: null, keyName: 'Local Dev Key' };
     }
   }
@@ -173,12 +211,10 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidat
       .single();
 
     if (data && data.is_active) {
-      // Fire-and-forget last_used_at update
-      supabase
+      await supabase
         .from('hitl_api_keys')
         .update({ last_used_at: new Date().toISOString() })
-        .eq('id', data.id)
-        .then(() => {}, () => {});
+        .eq('id', data.id);
 
       return { valid: true, keyId: data.id, keyName: data.name };
     }
@@ -188,7 +224,7 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidat
 
   // Env var fallback (backwards compatibility)
   const envKey = process.env.HITL_API_KEY;
-  if (envKey && timingSafeCompare(bearerToken, envKey)) {
+  if (envKey && await timingSafeCompare(bearerToken, envKey)) {
     return { valid: true, keyId: null, keyName: null };
   }
 

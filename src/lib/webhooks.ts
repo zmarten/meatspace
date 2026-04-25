@@ -21,31 +21,32 @@ export async function deliverWebhook(params: {
   if (!isAllowedCallbackUrl(url)) {
     return { success: false, error: 'Webhook URL is not on the allowlist' };
   }
+  if (!secret) {
+    return { success: false, error: 'Webhook secret is not configured — refusing unsigned delivery' };
+  }
 
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const body = JSON.stringify(payload);
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (secret) {
-    const signingPayload = `${timestamp}.${body}`;
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const sigBuffer = await crypto.subtle.sign(
-      'HMAC',
-      keyMaterial,
-      new TextEncoder().encode(signingPayload)
-    );
-    const signature = Array.from(new Uint8Array(sigBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    headers['X-HITL-Timestamp'] = timestamp;
-    headers['X-HITL-Signature'] = signature;
-  }
+  const signingPayload = `${timestamp}.${body}`;
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuffer = await crypto.subtle.sign(
+    'HMAC',
+    keyMaterial,
+    new TextEncoder().encode(signingPayload)
+  );
+  const signature = Array.from(new Uint8Array(sigBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  headers['X-HITL-Timestamp'] = timestamp;
+  headers['X-HITL-Signature'] = signature;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);

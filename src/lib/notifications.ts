@@ -112,9 +112,7 @@ export async function sendKeyCreatedEmail(params: {
   });
 }
 
-export async function sendNotification(request: NotifiableRequest): Promise<void> {
-  const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/review/${request.id}`;
-
+export async function sendNotification(request: NotifiableRequest, reviewUrl: string): Promise<void> {
   const hasEmail = !!(process.env.RESEND_API_KEY && process.env.NOTIFICATION_EMAIL);
   const hasSms = !!(process.env.TWILIO_ACCOUNT_SID && process.env.NOTIFICATION_PHONE);
 

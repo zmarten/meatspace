@@ -2,15 +2,37 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { authorizeRequestAccess } from '@/lib/auth';
 import { toPollResponse } from '@/lib/request-contract';
 
+function extractBearer(req: NextRequest): string | null {
+  const header = req.headers.get('authorization');
+  if (!header) return null;
+  const match = header.match(/^bearer\s+(.+)$/i);
+  return match ? match[1] : null;
+}
+
 // GET /api/requests/[id]/wait — Long-poll for response (agent blocks here)
-// No auth — same magic-link pattern as GET/PATCH on the request
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  const bearerToken = extractBearer(req);
+  const reviewToken = req.headers.get('x-review-token');
+  if (!bearerToken && !reviewToken) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: Bearer token or x-review-token required' },
+      { status: 401 }
+    );
+  }
+
+  const authorized = await authorizeRequestAccess(id, bearerToken, reviewToken);
+  if (!authorized) {
+    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+  }
+
   const supabase = await createServiceClient();
   const { searchParams } = new URL(req.url);
   // Cloudflare Workers wall-clock limit is 30s; cap at 25s to leave a safe margin

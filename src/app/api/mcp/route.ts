@@ -192,11 +192,11 @@ async function handleAskHuman(args: Record<string, unknown>, apiKeyId: string | 
 }
 
 export async function POST(req: NextRequest) {
-  const bearerToken = req.headers.get('authorization')?.replace('Bearer ', '');
+  const bearerToken = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
   const auth = bearerToken ? await validateApiKey(bearerToken) : { valid: false, keyId: null, keyName: null };
   if (!auth.valid) {
     return NextResponse.json(
-      { jsonrpc: '2.0', error: { code: -32000, message: 'Unauthorized: valid API key required' } },
+      { jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Unauthorized: valid API key required' } },
       { status: 401 }
     );
   }
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('MCP error:', err);
     return NextResponse.json(
-      { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } },
+      { jsonrpc: '2.0', id: null, error: { code: -32603, message: 'Internal error' } },
       { status: 500 }
     );
   }
