@@ -13,6 +13,54 @@ const spec = {
   },
   servers: [{ url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }],
   paths: {
+    '/api/keys': {
+      post: {
+        operationId: 'createApiKey',
+        summary: 'Create an API key (self-serve)',
+        description: 'No authentication required. Creates an API key instantly. Max 5 active keys per email.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'email'],
+                properties: {
+                  name: { type: 'string', maxLength: 100, description: 'Key name (e.g. your agent name)' },
+                  email: { type: 'string', format: 'email', description: 'Owner email for confirmation' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'API key created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', const: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        name: { type: 'string' },
+                        key_prefix: { type: 'string' },
+                        api_key: { type: 'string', description: 'Full API key — shown only once' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+          '429': { description: 'Too many active keys for this email' },
+        },
+      },
+    },
     '/api/requests': {
       post: {
         operationId: 'createRequest',

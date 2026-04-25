@@ -8,7 +8,15 @@ MeatSpace is a human-in-the-loop service for AI agents. When your agent faces a 
 
 ### 1. Get an API key
 
-Request a Bearer token. All endpoints require `Authorization: Bearer <token>`.
+Create one instantly — no signup or approval required:
+
+```bash
+curl -X POST https://meatspace.run/api/keys \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-agent", "email": "you@example.com"}'
+```
+
+The response includes your `api_key`. Save it — it's shown once. All other endpoints require `Authorization: Bearer <token>`.
 
 ### 2. Choose your integration
 

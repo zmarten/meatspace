@@ -69,6 +69,49 @@ async function sendSms(request: NotifiableRequest, reviewUrl: string): Promise<v
   );
 }
 
+export async function sendKeyCreatedEmail(params: {
+  email: string;
+  name: string;
+  apiKey: string;
+}): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const docsUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://meatspace.run'}/docs`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#080b0f;color:#f0f2f5;border-radius:8px;">
+      <p style="font-size:12px;color:#8892a4;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">MEATSPACE</p>
+      <h2 style="font-size:18px;color:#f0f2f5;margin-bottom:16px;">Your API key is ready</h2>
+      <p style="font-size:13px;color:#b0b8c8;margin-bottom:12px;">Key name: <strong style="color:#f0f2f5;">${escHtml(params.name)}</strong></p>
+      <div style="background:#0d1117;border:1px solid #1e2936;border-radius:4px;padding:12px;margin-bottom:16px;">
+        <code style="font-size:13px;color:#e8a020;word-break:break-all;">${escHtml(params.apiKey)}</code>
+      </div>
+      <p style="font-size:12px;color:#8892a4;margin-bottom:16px;">Save this key now — it won't be shown again.</p>
+      <p style="font-size:13px;color:#b0b8c8;margin-bottom:8px;">Quick start:</p>
+      <div style="background:#0d1117;border:1px solid #1e2936;border-radius:4px;padding:12px;margin-bottom:20px;">
+        <code style="font-size:11px;color:#b0b8c8;white-space:pre-wrap;">curl -X POST https://meatspace.run/api/requests \\
+  -H "Authorization: Bearer ${escHtml(params.apiKey)}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name":"my-agent","title":"Test","choices":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}'</code>
+      </div>
+      <a href="${docsUrl}" style="display:inline-block;padding:12px 24px;background:#e8a020;color:#080b0f;text-decoration:none;border-radius:2px;font-weight:600;font-size:13px;letter-spacing:0.05em;text-transform:uppercase;">VIEW DOCS</a>
+    </div>
+  `;
+
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: process.env.NOTIFICATION_FROM || 'MeatSpace <noreply@meatspace.run>',
+      to: [params.email],
+      subject: '[MeatSpace] Your API key',
+      html,
+    }),
+  });
+}
+
 export async function sendNotification(request: NotifiableRequest): Promise<void> {
   const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/review/${request.id}`;
 

@@ -96,6 +96,11 @@ async function handleGetServiceStatus(): Promise<McpToolResult> {
         content_types: ['text', 'markdown', 'html', 'image'],
         response_modes: ['poll', 'long_poll', 'webhook', 'mcp'],
       },
+      provisioning: {
+        endpoint: 'POST https://meatspace.run/api/keys',
+        body: '{"name": "your-agent-name", "email": "owner@example.com"}',
+        note: 'No auth required. Returns api_key immediately. Max 5 active keys per email.',
+      },
       agent_guidance: {
         use_when: [
           'The task needs subjective human judgment or taste',

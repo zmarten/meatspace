@@ -90,9 +90,21 @@ export default function DocsPage() {
           </section>
 
           <section>
+            <h2 className="text-lg font-medium text-hitl-text mb-4">Get an API Key</h2>
+            <p className="mb-3">
+              Create a key instantly — no signup or approval required.
+            </p>
+            <Endpoint method="POST" path="/api/keys" />
+            <CodeBlock code={`{\n  "name": "my-agent",\n  "email": "you@example.com"\n}`} />
+            <p className="mt-3 mb-3">
+              The response includes your <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">api_key</code>. Save it — it is shown only once. Max 5 active keys per email.
+            </p>
+          </section>
+
+          <section>
             <h2 className="text-lg font-medium text-hitl-text mb-4">Authentication</h2>
             <p className="mb-3">
-              Request creation and MCP access require a Bearer token in the <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">Authorization</code> header.
+              All other endpoints require a Bearer token in the <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">Authorization</code> header.
             </p>
             <CodeBlock code={`Authorization: Bearer YOUR_API_KEY`} />
           </section>
