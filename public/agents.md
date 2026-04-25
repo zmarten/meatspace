@@ -44,7 +44,16 @@ curl -X POST https://meatspace.run/api/requests \
 
 ### 4. Get the result
 
-Poll `GET /api/requests/{id}` or use long-poll at `GET /api/requests/{id}/wait?timeout=25000`.
+Poll or long-poll with your Bearer token:
+
+```bash
+curl https://meatspace.run/api/requests/{id} \
+  -H "Authorization: Bearer $MEATSPACE_API_KEY"
+
+# Or long-poll (blocks until human responds or timeout):
+curl https://meatspace.run/api/requests/{id}/wait?timeout=25000 \
+  -H "Authorization: Bearer $MEATSPACE_API_KEY"
+```
 
 ---
 
@@ -161,6 +170,8 @@ The tool long-polls for up to 20 seconds. If the human hasn't responded, it retu
 
 `GET /api/requests/{id}`
 
+**Headers:** `Authorization: Bearer <token>`
+
 ```json
 {
   "success": true,
@@ -176,6 +187,8 @@ The tool long-polls for up to 20 seconds. If the human hasn't responded, it retu
 ### Long-poll
 
 `GET /api/requests/{id}/wait?timeout=25000`
+
+**Headers:** `Authorization: Bearer <token>`
 
 Holds the connection open until the human responds or the timeout is reached. Returns `202` while still pending.
 

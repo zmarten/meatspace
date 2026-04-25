@@ -80,7 +80,7 @@ Response:
 
 ### Poll status
 
-`GET /api/requests/{id}`
+`GET /api/requests/{id}` — requires `Authorization: Bearer <api_key>` header.
 
 ```json
 {
@@ -98,7 +98,7 @@ Response:
 
 ### Long-poll
 
-`GET /api/requests/{id}/wait?timeout=30000`
+`GET /api/requests/{id}/wait?timeout=25000` — requires `Authorization: Bearer <api_key>` header.
 
 Returns HTTP `202` while still pending.
 

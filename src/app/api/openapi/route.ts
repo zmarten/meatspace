@@ -57,7 +57,7 @@ const spec = {
             },
           },
           '400': { description: 'Validation error' },
-          '429': { description: 'Too many active keys for this email' },
+          '429': { description: 'Too many active keys for this email, or too many requests from this IP' },
         },
       },
     },
@@ -131,7 +131,8 @@ const spec = {
         operationId: 'pollRequest',
         summary: 'Poll request status',
         description:
-          'Check whether the human has responded. Returns only the minimal agent-facing status payload.',
+          'Check whether the human has responded. Requires Bearer token or x-review-token header.',
+        security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
           '200': {
@@ -149,6 +150,7 @@ const spec = {
               },
             },
           },
+          '401': { description: 'Missing or invalid Bearer token / review token' },
           '404': { description: 'Request not found' },
         },
       },
@@ -178,7 +180,8 @@ const spec = {
       get: {
         operationId: 'waitForResponse',
         summary: 'Long-poll for response',
-        description: 'Block until the human responds or timeout. Returns 202 if still pending.',
+        description: 'Block until the human responds or timeout. Requires Bearer token or x-review-token. Returns 202 if still pending.',
+        security: [{ bearerAuth: [] }],
         parameters: [
           { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
           { name: 'timeout', in: 'query', schema: { type: 'integer', default: 25000, maximum: 25000 } },
@@ -186,6 +189,7 @@ const spec = {
         responses: {
           '200': { description: 'Request completed or expired' },
           '202': { description: 'Still pending, retry' },
+          '401': { description: 'Missing or invalid Bearer token / review token' },
           '404': { description: 'Request not found' },
         },
       },

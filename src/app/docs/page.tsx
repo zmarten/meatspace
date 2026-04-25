@@ -151,14 +151,20 @@ export default function DocsPage() {
           <section>
             <h2 className="text-lg font-medium text-hitl-text mb-4">Poll for Result</h2>
             <Endpoint method="GET" path="/api/requests/{id}" />
-            <p className="mb-3">Returns a minimal status payload safe for agent polling.</p>
+            <p className="mb-3">
+              Requires <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">Authorization: Bearer</code> header.
+              Returns a minimal status payload safe for agent polling.
+            </p>
             <CodeBlock code={pollExample} />
           </section>
 
           <section>
             <h2 className="text-lg font-medium text-hitl-text mb-4">Long-Poll</h2>
-            <Endpoint method="GET" path="/api/requests/{id}/wait?timeout=30000" />
-            <p className="mb-3">Blocks until the human responds or timeout. Returns HTTP 202 while still pending.</p>
+            <Endpoint method="GET" path="/api/requests/{id}/wait?timeout=25000" />
+            <p className="mb-3">
+              Requires <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">Authorization: Bearer</code> header.
+              Blocks until the human responds or timeout. Returns HTTP 202 while still pending.
+            </p>
           </section>
 
           <section>
