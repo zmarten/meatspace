@@ -5,44 +5,49 @@ import { createServiceClient } from '@/lib/supabase';
 import { validateApiKey } from '@/lib/auth';
 import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
+import { withCors, corsOptionsResponse } from '@/lib/cors';
 
 export async function POST(req: NextRequest) {
   const bearerToken = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
   if (!bearerToken) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Unauthorized: valid Bearer token required' },
       { status: 401 }
-    );
+    ));
   }
 
   const auth = await validateApiKey(bearerToken);
   if (!auth.valid) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Unauthorized: valid Bearer token required' },
       { status: 401 }
-    );
+    ));
   }
 
   let body: CreateRequestBody;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Invalid request body', code: 'invalid_request_body' },
       { status: 400 }
-    );
+    ));
   }
 
   const result = await createHitlRequest({ body, apiKeyId: auth.keyId });
 
   if ('error' in result) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: result.error, code: result.code },
       { status: result.status }
-    );
+    ));
   }
 
-  return NextResponse.json({ success: true, data: result.data }, { status: 201 });
+  return withCors(NextResponse.json({ success: true, data: result.data }, { status: 201 }));
+}
+
+export async function OPTIONS() {
+  return corsOptionsResponse('POST, OPTIONS', 'Content-Type, Authorization');
 }
 
 export async function GET(req: NextRequest) {

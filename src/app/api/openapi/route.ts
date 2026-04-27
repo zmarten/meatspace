@@ -8,7 +8,8 @@ const spec = {
     title: 'MeatSpace API',
     version: '0.1.0',
     description:
-      'Flesh-in-the-loop service. AI agents submit content plus 2-4 choices, humans choose, and agents receive a structured result.',
+      'Flesh-in-the-loop service. AI agents submit content plus 2-4 choices, humans choose, and agents receive a structured result. ' +
+      'Browser SDK available at /sdk/meatspace.js. MCP endpoint supports unauthenticated discovery and key provisioning.',
     contact: { url: 'https://meatspace.run' },
   },
   servers: [{ url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }],
@@ -207,18 +208,25 @@ const spec = {
       },
     },
     '/api/mcp': {
+      get: {
+        operationId: 'mcpServerInfo',
+        summary: 'MCP server info (discovery)',
+        description: 'Returns MCP server capabilities. No auth required.',
+        responses: {
+          '200': { description: 'Server info with protocol version and capabilities' },
+        },
+      },
       post: {
         operationId: 'mcpHandler',
         summary: 'MCP server endpoint',
-        description: 'Model Context Protocol (JSON-RPC) endpoint. Tools: get_service_status, ask_human.',
-        security: [{ bearerAuth: [] }],
+        description: 'Model Context Protocol (JSON-RPC) endpoint. Tools: get_service_status (no auth), provision_api_key (no auth), ask_human (requires Bearer).',
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { type: 'object' } } },
         },
         responses: {
           '200': { description: 'JSON-RPC response' },
-          '401': { description: 'Missing or invalid Bearer token' },
+          '401': { description: 'Missing or invalid Bearer token (only for ask_human)' },
         },
       },
     },

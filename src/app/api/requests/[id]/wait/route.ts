@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { authorizeRequestAccess } from '@/lib/auth';
 import { toPollResponse } from '@/lib/request-contract';
+import { withCors, corsOptionsResponse } from '@/lib/cors';
 
 function extractBearer(req: NextRequest): string | null {
   const header = req.headers.get('authorization');
@@ -22,15 +23,15 @@ export async function GET(
   const bearerToken = extractBearer(req);
   const reviewToken = req.headers.get('x-review-token');
   if (!bearerToken && !reviewToken) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Unauthorized: Bearer token or x-review-token required' },
       { status: 401 }
-    );
+    ));
   }
 
   const authorized = await authorizeRequestAccess(id, bearerToken, reviewToken);
   if (!authorized) {
-    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+    return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
   }
 
   const supabase = await createServiceClient();
@@ -49,7 +50,7 @@ export async function GET(
       .single();
 
     if (error || !data) {
-      return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+      return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
     }
 
     lastKnownExpiresAt = data.expires_at;
@@ -57,25 +58,25 @@ export async function GET(
     // Check expiry
     if (data.expires_at && new Date(data.expires_at) < new Date() && data.status === 'pending') {
       await supabase.from('hitl_requests').update({ status: 'expired' }).eq('id', id);
-      return NextResponse.json({
+      return withCors(NextResponse.json({
         success: true,
         data: toPollResponse({ ...data, status: 'expired', selected: null, responded_at: null }),
-      });
+      }));
     }
 
     // Return if terminal state
     if (data.status === 'completed' || data.status === 'expired') {
-      return NextResponse.json({
+      return withCors(NextResponse.json({
         success: true,
         data: toPollResponse(data),
-      });
+      }));
     }
 
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   // Timeout — tell agent to retry
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     success: true,
     data: toPollResponse({
       id,
@@ -90,5 +91,12 @@ export async function GET(
       responded_at: null,
       expires_at: lastKnownExpiresAt,
     }),
-  }, { status: 202 });
+  }, { status: 202 }));
+}
+
+export async function OPTIONS(
+  _req: NextRequest,
+  { params: _params }: { params: Promise<{ id: string }> }
+) {
+  return corsOptionsResponse('GET, OPTIONS', 'Content-Type, Authorization, x-review-token');
 }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { reviewTokenMatches, authorizeRequestAccess } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase';
 import { isAllowedCallbackUrl } from '@/lib/auth';
+import { withCors, corsOptionsResponse } from '@/lib/cors';
 
 function extractBearer(req: NextRequest): string | null {
   const header = req.headers.get('authorization');
@@ -48,15 +49,15 @@ export async function GET(
   const bearerToken = extractBearer(req);
   const reviewToken = req.headers.get('x-review-token');
   if (!bearerToken && !reviewToken) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Unauthorized: Bearer token or x-review-token required' },
       { status: 401 }
-    );
+    ));
   }
 
   const authorized = await authorizeRequestAccess(id, bearerToken, reviewToken);
   if (!authorized) {
-    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+    return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
   }
 
   const supabase = await createServiceClient();
@@ -68,7 +69,7 @@ export async function GET(
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+    return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
   }
 
   if (data.expires_at && new Date(data.expires_at) < new Date() && data.status === 'pending') {
@@ -76,10 +77,10 @@ export async function GET(
     data.status = 'expired';
   }
 
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     success: true,
     data: toPollResponse(data),
-  });
+  }));
 }
 
 export async function PATCH(
@@ -89,7 +90,7 @@ export async function PATCH(
   const { id } = await params;
   const authorized = await getAuthorizedReviewRequest(req, id);
   if (authorized.notFound || !authorized.request) {
-    return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+    return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
   }
 
   const request = authorized.request;
@@ -101,53 +102,53 @@ export async function PATCH(
       .update({ status: 'expired' })
       .eq('id', id)
       .eq('status', 'pending');
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Request has expired', code: 'request_expired' },
       { status: 410 }
-    );
+    ));
   }
 
   if (request.status === 'completed') {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Request already completed', code: 'request_already_completed' },
       { status: 409 }
-    );
+    ));
   }
 
   if (request.status === 'expired') {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Request has expired', code: 'request_expired' },
       { status: 410 }
-    );
+    ));
   }
 
   let body: { selected_option: string };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Invalid request body', code: 'invalid_request_body' },
       { status: 400 }
-    );
+    ));
   }
 
   if (!body.selected_option || typeof body.selected_option !== 'string') {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'selected_option is required', code: 'selected_option_required' },
       { status: 400 }
-    );
+    ));
   }
 
   const validChoiceIds = (request.choices || []).map((choice: { id: string }) => choice.id);
   if (!validChoiceIds.includes(body.selected_option)) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       {
         success: false,
         error: `selected_option must be one of: ${validChoiceIds.join(', ')}`,
         code: 'invalid_selected_option',
       },
       { status: 400 }
-    );
+    ));
   }
 
   const selectedLabel =
@@ -156,14 +157,14 @@ export async function PATCH(
     )?.label ?? null;
 
   if (!selectedLabel) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       {
         success: false,
         error: 'selected_option did not resolve to a known choice',
         code: 'invalid_selected_option',
       },
       { status: 400 }
-    );
+    ));
   }
 
   const now = new Date().toISOString();
@@ -179,10 +180,10 @@ export async function PATCH(
     .select('id');
 
   if (updateError) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Failed to submit response', code: 'request_update_failed' },
       { status: 500 }
-    );
+    ));
   }
 
   if (!updatedRows || updatedRows.length === 0) {
@@ -193,23 +194,23 @@ export async function PATCH(
       .single();
 
     if (!latest) {
-      return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
+      return withCors(NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 }));
     }
 
     if (
       latest.status === 'expired' ||
       (latest.expires_at && new Date(latest.expires_at) < new Date())
     ) {
-      return NextResponse.json(
+      return withCors(NextResponse.json(
         { success: false, error: 'Request has expired', code: 'request_expired' },
         { status: 410 }
-      );
+      ));
     }
 
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { success: false, error: 'Request already completed', code: 'request_already_completed' },
       { status: 409 }
-    );
+    ));
   }
 
   if (request.callback_url && isAllowedCallbackUrl(request.callback_url)) {
@@ -228,7 +229,7 @@ export async function PATCH(
     }).catch((err) => console.error('Webhook delivery failed:', err));
   }
 
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     success: true,
     data: {
       id,
@@ -238,5 +239,9 @@ export async function PATCH(
       responded_at: now,
       expires_at: request.expires_at,
     },
-  });
+  }));
+}
+
+export async function OPTIONS() {
+  return corsOptionsResponse('GET, PATCH, OPTIONS', 'Content-Type, Authorization, x-review-token');
 }
