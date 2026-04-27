@@ -2,8 +2,10 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { validateApiKey } from '@/lib/auth';
+import { validateApiKey, generateApiKey, hashApiKey } from '@/lib/auth';
 import { createHitlRequest } from '@/lib/requests';
+import { sendKeyCreatedEmail } from '@/lib/notifications';
+import { corsOptionsResponse } from '@/lib/cors';
 
 type McpToolResult = {
   isError: boolean;
@@ -14,9 +16,27 @@ type McpToolResult = {
  * MCP Server - Streamable HTTP transport
  *
  * Tools:
- *   - get_service_status
- *   - ask_human
+ *   - get_service_status  (no auth)
+ *   - provision_api_key   (no auth, rate-limited)
+ *   - ask_human           (requires Bearer auth)
  */
+
+const MAX_ACTIVE_KEYS_PER_EMAIL = 5;
+const IP_RATE_LIMIT = 5;
+const IP_RATE_WINDOW_MS = 60 * 60 * 1000;
+const mcpIpRequestCounts = new Map<string, { count: number; resetAt: number }>();
+
+function checkMcpIpRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = mcpIpRequestCounts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    mcpIpRequestCounts.set(ip, { count: 1, resetAt: now + IP_RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= IP_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
 
 const TOOLS = [
   {
@@ -81,6 +101,21 @@ const TOOLS = [
       required: ['agent_name', 'title', 'choices'],
     },
   },
+  {
+    name: 'provision_api_key',
+    description:
+      'Create a MeatSpace API key instantly. No authentication required. ' +
+      'Returns a Bearer token for use with the ask_human tool. ' +
+      'Max 5 active keys per email address.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Agent or tool name (max 100 chars)' },
+        email: { type: 'string', description: 'Owner email address' },
+      },
+      required: ['name', 'email'],
+    },
+  },
 ];
 
 async function handleGetServiceStatus(): Promise<McpToolResult> {
@@ -112,6 +147,77 @@ async function handleGetServiceStatus(): Promise<McpToolResult> {
           'The choice is reversible and low stakes',
         ],
       },
+    },
+  };
+}
+
+async function handleProvisionApiKey(args: Record<string, unknown>, ip: string): Promise<McpToolResult> {
+  if (!checkMcpIpRateLimit(ip)) {
+    return { isError: true, payload: { error: 'Too many key creation requests. Try again later.', code: 'ip_rate_limit' } };
+  }
+
+  const name = args.name as string | undefined;
+  const email = args.email as string | undefined;
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return { isError: true, payload: { error: 'name is required', code: 'name_required' } };
+  }
+  if (name.length > 100) {
+    return { isError: true, payload: { error: 'name max 100 characters', code: 'name_too_long' } };
+  }
+  if (!email || typeof email !== 'string') {
+    return { isError: true, payload: { error: 'email is required', code: 'email_required' } };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return { isError: true, payload: { error: 'Invalid email address', code: 'invalid_email' } };
+  }
+
+  const supabase = await createServiceClient();
+
+  const { count } = await supabase
+    .from('hitl_api_keys')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_email', normalizedEmail)
+    .eq('is_active', true);
+
+  if (count !== null && count >= MAX_ACTIVE_KEYS_PER_EMAIL) {
+    return { isError: true, payload: { error: `Maximum ${MAX_ACTIVE_KEYS_PER_EMAIL} active keys per email address`, code: 'rate_limit_exceeded' } };
+  }
+
+  const apiKey = generateApiKey();
+  const keyHash = await hashApiKey(apiKey);
+  const keyPrefix = apiKey.slice(0, 12);
+
+  const { data, error } = await supabase
+    .from('hitl_api_keys')
+    .insert({
+      name: name.trim(),
+      key_hash: keyHash,
+      key_prefix: keyPrefix,
+      owner_email: normalizedEmail,
+      is_active: true,
+    })
+    .select('id, name, key_prefix')
+    .single();
+
+  if (error) {
+    return { isError: true, payload: { error: 'Failed to create API key', code: 'key_create_failed' } };
+  }
+
+  await sendKeyCreatedEmail({ email: normalizedEmail, name: name.trim(), apiKey }).catch((err) =>
+    console.error('Key confirmation email failed:', err)
+  );
+
+  return {
+    isError: false,
+    payload: {
+      id: data.id,
+      name: data.name,
+      key_prefix: data.key_prefix,
+      api_key: apiKey,
+      usage: `Set Authorization header to: Bearer ${apiKey}`,
     },
   };
 }
@@ -192,14 +298,7 @@ async function handleAskHuman(args: Record<string, unknown>, apiKeyId: string | 
 }
 
 export async function POST(req: NextRequest) {
-  const bearerToken = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
-  const auth = bearerToken ? await validateApiKey(bearerToken) : { valid: false, keyId: null, keyName: null };
-  if (!auth.valid) {
-    return NextResponse.json(
-      { jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Unauthorized: valid API key required' } },
-      { status: 401 }
-    );
-  }
+  const ip = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 
   try {
     const body = await req.json();
@@ -240,7 +339,9 @@ export async function POST(req: NextRequest) {
             error: { code: -32602, message: 'Invalid params' },
           });
         }
-        if (!['ask_human', 'get_service_status'].includes(name)) {
+
+        const KNOWN_TOOLS = ['ask_human', 'get_service_status', 'provision_api_key'];
+        if (!KNOWN_TOOLS.includes(name)) {
           return NextResponse.json({
             jsonrpc: '2.0',
             id,
@@ -248,9 +349,25 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const result = name === 'get_service_status'
-          ? await handleGetServiceStatus()
-          : await handleAskHuman(args || {}, auth.keyId);
+        let result: McpToolResult;
+
+        if (name === 'get_service_status') {
+          result = await handleGetServiceStatus();
+        } else if (name === 'provision_api_key') {
+          result = await handleProvisionApiKey(args || {}, ip);
+        } else {
+          // ask_human requires auth
+          const bearerToken = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
+          const auth = bearerToken ? await validateApiKey(bearerToken) : { valid: false, keyId: null, keyName: null };
+          if (!auth.valid) {
+            return NextResponse.json({
+              jsonrpc: '2.0',
+              id,
+              error: { code: -32000, message: 'Unauthorized: valid API key required. Use provision_api_key to get one.' },
+            }, { status: 401 });
+          }
+          result = await handleAskHuman(args || {}, auth.keyId);
+        }
 
         return NextResponse.json({
           jsonrpc: '2.0',
@@ -284,13 +401,25 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+export async function GET() {
+  return NextResponse.json(
+    {
+      jsonrpc: '2.0',
+      result: {
+        protocolVersion: '2024-11-05',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'meatspace', version: '0.1.0' },
+      },
     },
-  });
+    {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=60',
+      },
+    }
+  );
+}
+
+export async function OPTIONS() {
+  return corsOptionsResponse('GET, POST, OPTIONS', 'Content-Type, Authorization');
 }
