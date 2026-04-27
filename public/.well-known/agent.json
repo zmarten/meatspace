@@ -1,19 +1,57 @@
 {
   "name": "MeatSpace",
-  "description": "Flesh-in-the-loop service for agents. Submit content plus 2-4 choices, receive one human-selected option.",
+  "description": "Human-in-the-loop service for AI agents. Submit content plus 2-4 choices, receive a structured human decision.",
   "url": "https://meatspace.run",
   "version": "0.1.0",
   "provider": {
-    "name": "MeatSpace",
+    "organization": "MeatSpace",
     "url": "https://meatspace.run"
   },
   "capabilities": {
-    "interaction_model": "content_plus_choices",
-    "content_types": ["text", "markdown", "html", "image"],
-    "min_choices": 2,
-    "max_choices": 4,
-    "authentication": ["bearer_token"],
-    "response_modes": ["poll", "long_poll", "webhook", "mcp"]
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": false
+  },
+  "authentication": {
+    "schemes": ["bearer"],
+    "credentials": "Obtain a key instantly via POST https://meatspace.run/api/keys with {\"name\": \"your-agent\", \"email\": \"you@example.com\"}. No signup or approval required. Use the returned api_key as Bearer token."
+  },
+  "defaultInputModes": ["application/json"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "ask_human",
+      "name": "Ask Human",
+      "description": "Present content and 2-4 choices to a human for subjective judgment, approval, preference, or tie-break. Returns the selected option as a structured result.",
+      "tags": ["human-in-the-loop", "subjective-judgment", "approval", "preference", "tie-break"],
+      "examples": [
+        "Which design option should we ship?",
+        "Should we deploy to production?",
+        "Which copy reads better?",
+        "Approve this purchase order?"
+      ]
+    },
+    {
+      "id": "get_service_status",
+      "name": "Service Status",
+      "description": "Check service availability and get guidance on when to escalate decisions to humans.",
+      "tags": ["status", "health-check", "guidance"]
+    },
+    {
+      "id": "provision_api_key",
+      "name": "Provision API Key",
+      "description": "Create a MeatSpace API key instantly. No authentication required. Returns a Bearer token for use with ask_human.",
+      "tags": ["onboarding", "self-service", "api-key"]
+    }
+  ],
+  "endpoints": {
+    "api": "/api/requests",
+    "mcp": "/api/mcp",
+    "status": "/api/status",
+    "keys": "/api/keys",
+    "openapi": "/api/openapi",
+    "sdk": "/sdk/meatspace.js",
+    "documentation": "/llms-full.txt"
   },
   "agent_guidance": {
     "use_when": [
@@ -26,27 +64,13 @@
       "The choice is reversible and low stakes"
     ]
   },
-  "endpoints": {
-    "status": "/api/status",
-    "requests": "/api/requests",
-    "mcp": "/api/mcp",
-    "openapi": "/api/openapi",
-    "documentation": "/llms-full.txt"
-  },
-  "result_shape": {
-    "id": "uuid",
-    "status": "pending|completed|expired",
-    "selected": "choice-id|null",
-    "selected_label": "choice-label|null",
-    "responded_at": "iso-8601|null",
-    "expires_at": "iso-8601|null"
-  },
   "tags": [
     "human-in-the-loop",
     "agents",
     "subjective-judgment",
     "approval",
     "preference",
-    "mcp"
+    "mcp",
+    "a2a"
   ]
 }

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "name": "meatspace",
   "display_name": "MeatSpace",
-  "description": "Flesh-in-the-loop service for agents. Check service guidance with get_service_status, then use ask_human for subjective choices.",
+  "description": "Flesh-in-the-loop service for agents. Use provision_api_key to get a Bearer token, then ask_human for subjective choices.",
   "version": "0.1.0",
   "transport": {
     "type": "http",
@@ -11,7 +11,7 @@
   "tools": [
     {
       "name": "get_service_status",
-      "description": "Check whether MeatSpace is available and when to escalate to a human.",
+      "description": "Check whether MeatSpace is available and when to escalate to a human. No auth required.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -19,8 +19,20 @@
       }
     },
     {
+      "name": "provision_api_key",
+      "description": "Create a MeatSpace API key instantly. No auth required. Returns a Bearer token for ask_human. Max 5 keys per email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Agent or tool name (max 100 chars)" },
+          "email": { "type": "string", "description": "Owner email address" }
+        },
+        "required": ["name", "email"]
+      }
+    },
+    {
       "name": "ask_human",
-      "description": "Submit content plus 2-4 choices for subjective human judgment, approval, preference, or tie-breaks.",
+      "description": "Submit content plus 2-4 choices for subjective human judgment, approval, preference, or tie-breaks. Requires Bearer auth.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -61,6 +73,12 @@
       "description": "Full MeatSpace agent documentation",
       "uri": "https://meatspace.run/llms-full.txt",
       "mimeType": "text/plain"
+    },
+    {
+      "name": "browser_sdk",
+      "description": "MeatSpace JavaScript SDK for browser-based agents",
+      "uri": "https://meatspace.run/sdk/meatspace.js",
+      "mimeType": "application/javascript"
     }
   ]
 }

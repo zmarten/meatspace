@@ -1,8 +1,20 @@
-# MeatSpace â€” Agent Integration Guide
+# MeatSpace — Agent Integration Guide
 
 MeatSpace is a human-in-the-loop service for AI agents. When your agent faces a subjective, high-stakes, or ambiguous decision, MeatSpace routes it to a human who selects one of 2-4 options and returns a structured result.
 
 **Base URL:** `https://meatspace.run`
+
+## Zero-Setup Self-Service (No Human Required)
+
+An AI agent can fully onboard itself in three API calls:
+
+1. `POST /api/keys` with `{“name”: “your-agent”, “email”: “owner@example.com”}` — returns an API key instantly
+2. `POST /api/requests` with Bearer token + your question and choices — creates a review request
+3. `GET /api/requests/{id}/wait` — blocks until a human responds
+
+No signup page. No approval queue. No human in the setup loop.
+
+---
 
 ## Quick Start
 
@@ -74,11 +86,14 @@ curl https://meatspace.run/api/requests/{id}/wait?timeout=25000 \
 
 MeatSpace implements MCP (Model Context Protocol) with Streamable HTTP transport.
 
-**Discovery:** `GET /.well-known/mcp.json`
+**Discovery:** `GET /.well-known/mcp.json` or `GET /api/mcp` (returns server info)
 
 **Tools:**
-- `get_service_status` â€” Check availability and get escalation guidance
-- `ask_human` â€” Submit a decision to a human reviewer
+- `get_service_status` — Check availability and get escalation guidance (no auth)
+- `provision_api_key` — Create an API key instantly (no auth, rate-limited)
+- `ask_human` — Submit a decision to a human reviewer (requires Bearer auth)
+
+An MCP client can self-onboard without prior auth: `initialize` → `tools/list` → `provision_api_key` → `ask_human`.
 
 ### Claude Code Configuration
 
@@ -124,6 +139,32 @@ Add to your MCP settings:
 ```
 
 The tool long-polls for up to 20 seconds. If the human hasn't responded, it returns `status: "pending"` with a `review_url` and `poll_url`.
+
+---
+
+## Browser SDK
+
+For agents running in browser contexts, MeatSpace provides a lightweight JavaScript SDK:
+
+```html
+<script type="module">
+  import { MeatSpace } from 'https://meatspace.run/sdk/meatspace.js';
+
+  // Self-provision a key (or pass apiKey to constructor)
+  const ms = new MeatSpace();
+  await ms.getKey({ name: 'browser-agent', email: 'agent@example.com' });
+
+  // Ask a human
+  const result = await ms.ask({
+    agentName: 'browser-agent',
+    title: 'Which option?',
+    choices: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+  });
+  console.log(result.selected);
+</script>
+```
+
+Methods: `getKey()`, `createRequest()`, `pollResult()`, `waitForResult()`, `ask()` (create + wait).
 
 ---
 
@@ -218,12 +259,15 @@ Signed with `X-HITL-Timestamp` and `X-HITL-Signature` headers.
 | Path | Format | Purpose |
 |---|---|---|
 | `/.well-known/mcp.json` | JSON | MCP server manifest |
-| `/.well-known/agent.json` | JSON | Agent capability card |
+| `/.well-known/agent.json` | JSON | A2A Agent Card |
 | `/api/openapi` | JSON | OpenAPI 3.1 spec |
+| `/api/mcp` (GET) | JSON | MCP server info (no auth) |
 | `/api/status` | JSON | Health check + agent guidance |
+| `/sdk/meatspace.js` | JS | Browser SDK |
 | `/llms.txt` | Text | LLM-readable summary |
 | `/llms-full.txt` | Text | Full API documentation |
 | `/agents.md` | Markdown | This file |
+| `/sitemap.xml` | XML | Sitemap |
 | `/robots.txt` | Text | Crawler directives + discovery pointers |
 
 ---

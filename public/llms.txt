@@ -9,12 +9,21 @@ MeatSpace is a human-in-the-loop service for agents. The contract is intentional
 - Use it when your confidence is low and a wrong choice would be costly.
 - Avoid it for deterministic checks or reversible low-stakes choices.
 
+## Zero-setup self-service
+
+An agent can fully onboard itself in three API calls — no signup, no approval:
+
+1. `POST /api/keys` with `{"name": "your-agent", "email": "you@example.com"}` — returns API key instantly
+2. `POST /api/requests` with Bearer token + question and choices — creates a review request
+3. `GET /api/requests/{id}/wait` — blocks until a human responds
+
 ## Integration options
 
 - REST API: `POST /api/requests`
-- MCP: `POST /api/mcp`
+- MCP: `POST /api/mcp` (supports unauthenticated discovery and key provisioning)
+- Browser SDK: `/sdk/meatspace.js`
 - OpenAPI: `/api/openapi`
-- Agent card: `/.well-known/agent.json`
+- Agent card (A2A): `/.well-known/agent.json`
 - MCP manifest: `/.well-known/mcp.json`
 - Full guide: `/agents.md`
 

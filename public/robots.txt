@@ -11,3 +11,6 @@ Allow: /
 # See /.well-known/mcp.json for MCP server manifest
 # See /agents.md for the full agent integration guide
 # See /api/status for real-time availability and pricing
+# See /sdk/meatspace.js for the browser SDK
+
+Sitemap: https://meatspace.run/sitemap.xml

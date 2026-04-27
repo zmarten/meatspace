@@ -1,0 +1,85 @@
+# Smithery configuration for MeatSpace
+# https://smithery.ai/docs/build/project-config/smithery.yaml
+#
+# MeatSpace is already deployed at https://meatspace.run/api/mcp.
+# Smithery does not build or host it — this file provides metadata for
+# the registry listing and declares the runtime config the client must
+# supply (a Bearer token for ask_human; the other two tools are open).
+
+version: 1
+
+name: meatspace
+displayName: MeatSpace
+description: >-
+  Human-in-the-loop MCP server. Agents submit subjective decisions with
+  2-4 choices, and a human reviewer picks one. Self-service onboarding:
+  agents can mint their own API key via the provision_api_key tool — no
+  signup page, no approval queue.
+
+homepage: https://meatspace.run
+repository: https://github.com/zmarten/meatspace
+documentation: https://meatspace.run/agents.md
+icon: https://meatspace.run/icon.png
+license: MIT
+
+keywords:
+  - human-in-the-loop
+  - hitl
+  - human-feedback
+  - approval
+  - decision-support
+  - subjective-judgment
+  - escalation
+
+categories:
+  - agent-tools
+  - human-in-the-loop
+
+# This server is publicly hosted. Smithery should connect directly to
+# the existing endpoint rather than build a container.
+deployment:
+  type: remote
+
+startCommand:
+  type: http
+  url: https://meatspace.run/api/mcp
+  configSchema:
+    type: object
+    properties:
+      bearerToken:
+        type: string
+        title: API Key
+        description: >-
+          Bearer token used in the Authorization header for ask_human.
+          Optional — clients that don't have one can call provision_api_key
+          (no auth required) to mint one instantly. get_service_status and
+          provision_api_key work without a token.
+        format: password
+    required: []
+  exampleConfig:
+    bearerToken: ms_live_xxxxxxxxxxxxxxxxxxxxxxxx
+
+# The server advertises these tools via tools/list. Listed here for the
+# Smithery search index; the canonical schemas live in /.well-known/mcp.json.
+tools:
+  - name: get_service_status
+    description: >-
+      Check whether MeatSpace is available and when to escalate to a human.
+      No auth required.
+  - name: provision_api_key
+    description: >-
+      Create a MeatSpace API key instantly. Returns a Bearer token usable
+      with ask_human. No auth required; rate-limited to 5 keys per email.
+  - name: ask_human
+    description: >-
+      Submit a title, optional content, and 2-4 choices for human judgment,
+      approval, preference, or tie-breaks. Long-polls for up to 20s; returns
+      pending with review_url and poll_url if the human hasn't responded.
+      Requires Bearer auth.
+
+# Discovery endpoints registries can scrape for richer metadata.
+discovery:
+  mcpManifest: https://meatspace.run/.well-known/mcp.json
+  agentCard: https://meatspace.run/.well-known/agent.json
+  openapi: https://meatspace.run/api/openapi
+  llmsFull: https://meatspace.run/llms-full.txt

@@ -4,6 +4,16 @@
 
 MeatSpace lets an agent escalate a subjective or high-consequence decision to a human. The agent submits content plus 2-4 choices. A human reviews the request and selects one option. The agent receives a structured result through polling, long-polling, webhook, or MCP.
 
+## Zero-Setup Self-Service (No Human Required)
+
+An agent can fully onboard itself in three API calls:
+
+1. `POST /api/keys` with `{"name": "your-agent", "email": "owner@example.com"}` — returns an API key instantly
+2. `POST /api/requests` with Bearer token + your question and choices — creates a review request
+3. `GET /api/requests/{id}/wait` — blocks until a human responds
+
+No signup page. No approval queue. No human in the setup loop.
+
 ## When to use MeatSpace
 
 - Use it for subjective judgment, taste, approval, preference, or tie-breaks.
@@ -127,14 +137,37 @@ Headers:
 
 ## MCP
 
-`POST /api/mcp`
+`POST /api/mcp` — supports unauthenticated discovery and key provisioning.
+`GET /api/mcp` — returns server info without auth.
 
 Tools:
 
-- `get_service_status`
-- `ask_human`
+- `get_service_status` — no auth required
+- `provision_api_key` — no auth required, rate-limited (5 per email, 5 per IP/hr)
+- `ask_human` — requires Bearer auth
+
+An MCP client can self-onboard: `initialize` -> `tools/list` -> `provision_api_key` -> `ask_human`.
+
+`provision_api_key` accepts `{name, email}` and returns an `api_key` for use as Bearer token.
 
 `ask_human` accepts the same fields as the REST create request body and returns structured success or error payloads.
+
+## Browser SDK
+
+`/sdk/meatspace.js` — lightweight ES module, zero dependencies.
+
+```javascript
+import { MeatSpace } from 'https://meatspace.run/sdk/meatspace.js';
+const ms = new MeatSpace();
+await ms.getKey({ name: 'my-agent', email: 'you@example.com' });
+const result = await ms.ask({
+  agentName: 'my-agent',
+  title: 'Which option?',
+  choices: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+});
+```
+
+Methods: `getKey()`, `createRequest()`, `pollResult()`, `waitForResult()`, `ask()` (create + wait).
 
 ## Status
 
