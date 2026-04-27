@@ -36,7 +36,33 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body>{children}</body>
+      <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebApplication',
+              name: 'MeatSpace',
+              url: 'https://meatspace.run',
+              description:
+                'Human-in-the-loop API for AI agents. Submit content and 2-4 choices, receive a structured human decision via REST API, MCP, or browser SDK.',
+              applicationCategory: 'DeveloperApplication',
+              operatingSystem: 'Any',
+              offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+              featureList: [
+                'REST API',
+                'MCP Protocol',
+                'Browser SDK',
+                'Self-serve API keys',
+                'Webhook callbacks',
+                'Long-polling',
+              ],
+            }),
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

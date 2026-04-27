@@ -551,6 +551,23 @@ function Footer() {
 export default function LandingPage() {
   return (
     <main className="min-h-screen bg-hitl-bg text-hitl-text antialiased">
+      <section className="sr-only" aria-label="Service Summary">
+        <h2>What is MeatSpace?</h2>
+        <p>
+          MeatSpace is a human-in-the-loop API for AI agents. When your agent faces a
+          subjective, high-stakes, or ambiguous decision, MeatSpace routes it to a human
+          reviewer who selects one of 2-4 options and returns a structured result.
+        </p>
+        <p>
+          Integration options: REST API (POST /api/requests), MCP protocol (POST /api/mcp),
+          and a browser SDK (/sdk/meatspace.js). Self-serve API keys are available instantly
+          via POST /api/keys with no signup required.
+        </p>
+        <p>
+          Use MeatSpace for subjective judgment, taste, approval, preference, or tie-breaks.
+          Avoid it for deterministic checks or reversible low-stakes choices.
+        </p>
+      </section>
       <NavBar />
       <HeroSection />
       <FeaturesSection />

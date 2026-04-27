@@ -62,6 +62,8 @@ const mcpExample = `{
   }
 }`;
 
+import { TryItWidget } from './TryItWidget';
+
 export default function DocsPage() {
   return (
     <main className="min-h-screen px-6 py-16">
@@ -193,12 +195,43 @@ export default function DocsPage() {
           </section>
 
           <section>
+            <h2 className="text-lg font-medium text-hitl-text mb-4">Browser SDK</h2>
+            <p className="mb-3">
+              For agents running in browser contexts, MeatSpace provides a lightweight JavaScript SDK:
+            </p>
+            <CodeBlock code={`<script type="module">
+  import { MeatSpace } from 'https://meatspace.run/sdk/meatspace.js';
+
+  // Self-provision a key (or pass one to the constructor)
+  const ms = new MeatSpace();
+  await ms.getKey({ name: 'browser-agent', email: 'you@example.com' });
+
+  // Ask a human
+  const result = await ms.ask({
+    agentName: 'browser-agent',
+    title: 'Which option?',
+    choices: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+  });
+  console.log(result.selected);
+</script>`} />
+          </section>
+
+          <section>
+            <h2 className="text-lg font-medium text-hitl-text mb-4">Try It</h2>
+            <p className="mb-3">
+              Walk through the full MeatSpace flow in your browser — provision a key, send a request, and see the result.
+            </p>
+            <TryItWidget />
+          </section>
+
+          <section>
             <h2 className="text-lg font-medium text-hitl-text mb-4">Resources</h2>
             <ul className="flex flex-col gap-2">
               <li><a href="/api/openapi" className="text-hitl-accent hover:underline font-mono text-xs">OpenAPI 3.1 Spec</a></li>
               <li><a href="/llms.txt" className="text-hitl-accent hover:underline font-mono text-xs">llms.txt</a></li>
-              <li><a href="/.well-known/agent.json" className="text-hitl-accent hover:underline font-mono text-xs">Agent Card</a></li>
+              <li><a href="/.well-known/agent.json" className="text-hitl-accent hover:underline font-mono text-xs">Agent Card (A2A)</a></li>
               <li><a href="/.well-known/mcp.json" className="text-hitl-accent hover:underline font-mono text-xs">MCP Manifest</a></li>
+              <li><a href="/sdk/meatspace.js" className="text-hitl-accent hover:underline font-mono text-xs">Browser SDK</a></li>
               <li><a href="/api/status" className="text-hitl-accent hover:underline font-mono text-xs">Status</a></li>
             </ul>
           </section>
