@@ -184,21 +184,23 @@ export interface ApiKeyValidationResult {
 }
 
 /**
- * Validate a Bearer token by looking it up in the hitl_api_keys table (SHA-256 hash match).
- * Falls back to the HITL_API_KEY env var for backwards compatibility.
- * In mock mode, also accepts the hardcoded dev key.
+ * Validate a Bearer token against the hitl_api_keys table (SHA-256 hash match).
+ * In mock mode, also accepts a hardcoded dev key.
+ *
+ * The previous HITL_API_KEY env-var fallback was removed: it acted as a single
+ * shared master key that bypassed the per-key DB record (no scoping, no
+ * revocation, no last_used tracking). All real auth now flows through the
+ * multi-key DB path.
  */
 export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidationResult> {
   const invalid: ApiKeyValidationResult = { valid: false, keyId: null, keyName: null };
 
-  // Mock dev key — synchronous check before any DB call
   if (process.env.NODE_ENV !== 'production' && process.env.USE_MOCK === 'true') {
     if (await timingSafeCompare(bearerToken, 'hitl_mock-dev-key-for-local-testing')) {
       return { valid: true, keyId: null, keyName: 'Local Dev Key' };
     }
   }
 
-  // DB lookup by hash
   try {
     const { createServiceClient } = await import('./supabase');
     const supabase = await createServiceClient();
@@ -219,13 +221,7 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyValidat
       return { valid: true, keyId: data.id, keyName: data.name };
     }
   } catch {
-    // DB lookup failed — fall through to env var check
-  }
-
-  // Env var fallback (backwards compatibility)
-  const envKey = process.env.HITL_API_KEY;
-  if (envKey && await timingSafeCompare(bearerToken, envKey)) {
-    return { valid: true, keyId: null, keyName: null };
+    return invalid;
   }
 
   return invalid;
