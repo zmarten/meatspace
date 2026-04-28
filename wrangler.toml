@@ -4,13 +4,15 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".vercel/output/static"
 
 # Non-secret environment variables.
-# Secrets (API keys, tokens) are added via the Cloudflare dashboard → Settings → Variables → Secrets.
-# For local `wrangler pages dev` testing, copy .env.local values into .dev.vars instead.
+# Secrets (API keys, tokens, NOTIFICATION_EMAIL) live in Cloudflare Pages →
+# Settings → Variables → Secrets. The Supabase ANON key is intentionally
+# public (RLS protects the data); ANON is its designated role.
+#
+# For local `wrangler pages dev` testing, copy .env.local values into .dev.vars.
 # https://developers.cloudflare.com/pages/functions/bindings/#environment-variables
 [vars]
 NODE_ENV = "production"
 NEXT_PUBLIC_APP_URL = "https://meatspace.run"
 NEXT_PUBLIC_SUPABASE_URL = "https://wymeocgffkrtveozdhec.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bWVvY2dmZmtydHZlb3pkaGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NzE0MTksImV4cCI6MjA5MTE0NzQxOX0.PIjYE5-mDWn51A04GNaOD1IRhLzR0gNFhcvSRW4xLxw"
-NOTIFICATION_EMAIL = "zachdmartens@gmail.com"
 NOTIFICATION_FROM = "MeatSpace <noreply@meatspace.run>"
