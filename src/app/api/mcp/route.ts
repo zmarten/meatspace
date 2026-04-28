@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { validateApiKey, generateApiKey, hashApiKey } from '@/lib/auth';
 import { createHitlRequest } from '@/lib/requests';
-import { sendKeyCreatedEmail } from '@/lib/notifications';
 import { corsOptionsResponse } from '@/lib/cors';
+import { checkIpRateLimit } from '@/lib/rate-limit';
 
 type McpToolResult = {
   isError: boolean;
@@ -23,20 +23,7 @@ type McpToolResult = {
 
 const MAX_ACTIVE_KEYS_PER_EMAIL = 5;
 const IP_RATE_LIMIT = 5;
-const IP_RATE_WINDOW_MS = 60 * 60 * 1000;
-const mcpIpRequestCounts = new Map<string, { count: number; resetAt: number }>();
-
-function checkMcpIpRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = mcpIpRequestCounts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    mcpIpRequestCounts.set(ip, { count: 1, resetAt: now + IP_RATE_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= IP_RATE_LIMIT) return false;
-  entry.count++;
-  return true;
-}
+const IP_RATE_WINDOW_SECONDS = 60 * 60;
 
 const TOOLS = [
   {
@@ -152,7 +139,7 @@ async function handleGetServiceStatus(): Promise<McpToolResult> {
 }
 
 async function handleProvisionApiKey(args: Record<string, unknown>, ip: string): Promise<McpToolResult> {
-  if (!checkMcpIpRateLimit(ip)) {
+  if (!(await checkIpRateLimit(ip, 'mcp_provision', IP_RATE_LIMIT, IP_RATE_WINDOW_SECONDS))) {
     return { isError: true, payload: { error: 'Too many key creation requests. Try again later.', code: 'ip_rate_limit' } };
   }
 
@@ -206,9 +193,7 @@ async function handleProvisionApiKey(args: Record<string, unknown>, ip: string):
     return { isError: true, payload: { error: 'Failed to create API key', code: 'key_create_failed' } };
   }
 
-  await sendKeyCreatedEmail({ email: normalizedEmail, name: name.trim(), apiKey }).catch((err) =>
-    console.error('Key confirmation email failed:', err)
-  );
+  // No welcome email — see /api/keys for rationale (unverified-recipient spam vector).
 
   return {
     isError: false,

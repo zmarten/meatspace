@@ -3,30 +3,16 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateApiKey, hashApiKey } from '@/lib/auth';
-import { sendKeyCreatedEmail } from '@/lib/notifications';
 import { withCors, corsOptionsResponse } from '@/lib/cors';
+import { checkIpRateLimit } from '@/lib/rate-limit';
 
 const MAX_ACTIVE_KEYS_PER_EMAIL = 5;
-const IP_RATE_LIMIT = 5; // max key creations per IP per window
-const IP_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
-
-function checkIpRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = ipRequestCounts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    ipRequestCounts.set(ip, { count: 1, resetAt: now + IP_RATE_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= IP_RATE_LIMIT) return false;
-  entry.count++;
-  return true;
-}
+const IP_RATE_LIMIT = 5;
+const IP_RATE_WINDOW_SECONDS = 60 * 60;
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  if (!checkIpRateLimit(ip)) {
+  if (!(await checkIpRateLimit(ip, 'keys', IP_RATE_LIMIT, IP_RATE_WINDOW_SECONDS))) {
     return withCors(NextResponse.json(
       { success: false, error: 'Too many key creation requests. Try again later.', code: 'ip_rate_limit' },
       { status: 429 }
@@ -116,9 +102,9 @@ export async function POST(req: NextRequest) {
     ));
   }
 
-  await sendKeyCreatedEmail({ email, name: body.name.trim(), apiKey }).catch((err) =>
-    console.error('Key confirmation email failed:', err)
-  );
+  // Intentionally do NOT email the api_key — without verifying the address
+  // belongs to the caller, the welcome email is an unauthenticated spam
+  // vector. The key is returned in the HTTP response only.
 
   return withCors(NextResponse.json({
     success: true,
