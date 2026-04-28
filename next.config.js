@@ -13,12 +13,19 @@ const nextConfig = {
     ];
 
     // CSP is skipped in dev — Next.js HMR requires inline scripts and ws:// connections.
-    // In production, tighten script-src with a nonce before deploying publicly.
+    //
+    // script-src includes 'unsafe-inline' because Next.js's App Router emits
+    // inline <script> tags for hydration (the __next_f stream and JSON-LD
+    // blocks in layout.tsx). Without it the page never hydrates. The proper
+    // fix is per-request nonces injected via middleware — until that ships,
+    // the static CSP has to allow inline scripts. cloudflareinsights.com is
+    // allowed for the auto-injected analytics beacon.
+    //
     // frame-src 'self': allows the sandboxed <iframe srcDoc> on the review page.
     const prod = [
       {
         key: 'Content-Security-Policy',
-        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self'; frame-ancestors 'none';",
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com; frame-src 'self'; frame-ancestors 'none';",
       },
       { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
     ];
