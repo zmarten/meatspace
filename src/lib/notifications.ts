@@ -19,15 +19,22 @@ function escHtml(s: string) {
 async function sendEmail(request: NotifiableRequest, reviewUrl: string): Promise<void> {
   if (!process.env.RESEND_API_KEY || !process.env.NOTIFICATION_EMAIL) return;
 
-  const choiceList = request.choices.map((c) => `<li>${escHtml(c.label)}</li>`).join('');
+  // Email clients (especially Gmail) don't reliably inherit color/font through
+  // nested elements, so every leaf gets its own explicit styles.
+  const choiceList = request.choices
+    .map(
+      (c) =>
+        `<li style="color:#f0f2f5;font-family:system-ui,sans-serif;font-size:14px;padding:10px 14px;background:#0d1117;border:1px solid #1e2936;border-radius:4px;margin-bottom:6px;list-style:none;">${escHtml(c.label)}</li>`,
+    )
+    .join('');
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#080b0f;color:#f0f2f5;border-radius:8px;">
-      <p style="font-size:12px;color:#8892a4;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">DISPATCH FROM</p>
+      <p style="font-size:12px;color:#8892a4;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;font-family:system-ui,sans-serif;">DISPATCH FROM</p>
       <p style="font-size:14px;color:#f0f2f5;margin-bottom:16px;font-family:monospace;">${escHtml(request.agent_name)}</p>
-      <h2 style="font-size:18px;color:#f0f2f5;margin-bottom:12px;">${escHtml(request.title)}</h2>
-      <p style="font-size:12px;color:#8892a4;margin-bottom:8px;">CHOICES:</p>
+      <h2 style="font-size:18px;color:#f0f2f5;margin-bottom:12px;font-family:system-ui,sans-serif;">${escHtml(request.title)}</h2>
+      <p style="font-size:12px;color:#8892a4;margin-bottom:8px;font-family:system-ui,sans-serif;">CHOICES:</p>
       <ul style="list-style:none;padding:0;margin:0 0 24px;">${choiceList}</ul>
-      <a href="${reviewUrl}" style="display:inline-block;padding:14px 28px;background:#e8a020;color:#080b0f;text-decoration:none;border-radius:2px;font-weight:600;font-size:13px;letter-spacing:0.05em;text-transform:uppercase;">REVIEW &amp; CHOOSE</a>
+      <a href="${reviewUrl}" style="display:inline-block;padding:14px 28px;background:#e8a020;color:#080b0f;text-decoration:none;border-radius:2px;font-weight:600;font-size:13px;letter-spacing:0.05em;text-transform:uppercase;font-family:system-ui,sans-serif;">REVIEW &amp; CHOOSE</a>
     </div>
   `;
 
