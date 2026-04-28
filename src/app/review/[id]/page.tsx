@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { HitlRequest, ContentType } from '@/types';
 
 type ViewState = 'loading' | 'pending' | 'completed' | 'expired' | 'not_found';
@@ -71,38 +71,45 @@ function ContentRenderer({ content, contentType }: { content: string; contentTyp
 
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const reviewToken = searchParams.get('token');
+  const [reviewToken, setReviewToken] = useState<string | null>(null);
   const [request, setRequest] = useState<HitlRequest | null>(null);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Read token from window.location instead of useSearchParams() — the
+  // latter requires a <Suspense> boundary on Next 14 and was preventing the
+  // page from ever transitioning out of the loading state on Cloudflare Pages.
   useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token');
+    setReviewToken(token);
+
     async function fetchRequest() {
-      if (!reviewToken) {
+      if (!token) {
         setViewState('not_found');
         return;
       }
 
       try {
         const res = await fetch(`/api/review/${id}`, {
-          headers: { 'x-review-token': reviewToken },
+          headers: { 'x-review-token': token },
         });
         const json = await res.json();
         if (json.success && json.data) {
           setRequest(json.data);
           setViewState(json.data.status as ViewState);
         } else {
+          console.error('Review fetch returned unsuccessful response', { status: res.status, json });
           setViewState('not_found');
         }
-      } catch {
+      } catch (err) {
+        console.error('Review fetch threw', err);
         setViewState('not_found');
       }
     }
     void fetchRequest();
-  }, [id, reviewToken]);
+  }, [id]);
 
   const handleSubmit = async () => {
     if (!selectedChoice || submitting || !reviewToken) return;
