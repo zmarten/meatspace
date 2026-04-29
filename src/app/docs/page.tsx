@@ -97,9 +97,17 @@ export default function DocsPage() {
               Create a key instantly — no signup or approval required.
             </p>
             <Endpoint method="POST" path="/api/keys" />
+            <p className="mt-4 mb-2 text-xs uppercase tracking-[0.18em] text-hitl-text-muted">Request body</p>
             <CodeBlock code={`{\n  "name": "my-agent",\n  "email": "you@example.com"\n}`} />
+
+            <p className="mt-4 mb-2 text-xs uppercase tracking-[0.18em] text-hitl-text-muted">curl (macOS / Linux / WSL)</p>
+            <CodeBlock code={`curl -X POST https://meatspace.run/api/keys \\\n  -H "Content-Type: application/json" \\\n  -d '{"name":"my-agent","email":"you@example.com"}'`} />
+
+            <p className="mt-4 mb-2 text-xs uppercase tracking-[0.18em] text-hitl-text-muted">PowerShell (Windows)</p>
+            <CodeBlock code={`# PowerShell's curl is an alias for Invoke-WebRequest, which quotes JSON differently.\n# Invoke-RestMethod is the cleanest path on Windows:\n$body = @{ name = 'my-agent'; email = 'you@example.com' } | ConvertTo-Json\nInvoke-RestMethod -Uri https://meatspace.run/api/keys \`\n  -Method Post -ContentType 'application/json' -Body $body`} />
+
             <p className="mt-3 mb-3">
-              The response includes your <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">api_key</code>. Save it — it is shown only once. Max 5 active keys per email.
+              The response includes your <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono">api_key</code>. Save it — it is shown only once. Max 5 active keys per email. Rate limit: 5 keys per IP per hour.
             </p>
           </section>
 
@@ -186,10 +194,21 @@ export default function DocsPage() {
           <section>
             <h2 className="text-lg font-medium text-hitl-text mb-4">MCP Tools</h2>
             <p className="mb-3">
-              MeatSpace exposes two MCP tools:
+              MeatSpace exposes three MCP tools:
               <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">get_service_status</code>
-              and
-              <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">ask_human</code>.
+              (no auth),
+              <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">provision_api_key</code>
+              (no auth, rate-limited), and
+              <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">ask_human</code>
+              (requires Bearer auth).
+            </p>
+            <p className="mb-3">
+              The Authorization header is optional initially — a fresh client
+              can connect without credentials, call
+              <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">provision_api_key</code>
+              to mint a key, then add the header for subsequent
+              <code className="bg-hitl-surface-hover px-1.5 py-0.5 rounded text-xs font-mono mx-1">ask_human</code>
+              calls.
             </p>
             <CodeBlock code={mcpExample} />
           </section>
