@@ -4,13 +4,6 @@ import React from 'react';
 
 // ─── Const data ───────────────────────────────────────────────────────────────
 
-const STATS = [
-  { value: '1,247', label: 'dispatches resolved today' },
-  { value: '3.2 min', label: 'avg latency' },
-  { value: '94', label: 'active nodes' },
-  { value: '99.2%', label: 'uptime' },
-];
-
 const FEATURES = [
   {
     tag: 'FEATURE_01',
@@ -167,23 +160,6 @@ function NavBar() {
   );
 }
 
-function StatsBar() {
-  return (
-    <div className="flex flex-wrap gap-x-0 gap-y-4 border border-hitl-border rounded bg-hitl-surface divide-x divide-hitl-border overflow-hidden">
-      {STATS.map((stat) => (
-        <div key={stat.label} className="flex-1 min-w-[120px] px-5 py-4">
-          <div className="font-mono text-hitl-accent text-xl font-semibold tabular-nums">
-            {stat.value}
-          </div>
-          <div className="label-tracked text-hitl-text-muted text-xs mt-1">
-            {stat.label}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function RequestCardMock() {
   return (
     <div className="w-full max-w-sm bg-hitl-surface border border-hitl-border rounded shadow-2xl">
@@ -270,7 +246,6 @@ function HeroSection() {
                 VIEW API DOCS
               </a>
             </div>
-            <StatsBar />
           </div>
           <div className="flex justify-center lg:justify-end">
             <RequestCardMock />
