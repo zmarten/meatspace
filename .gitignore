@@ -7,3 +7,9 @@ node_modules/
 output/
 tmp/
 *.tsbuildinfo
+
+# Personal scratch / handoff notes — not for the repo
+HANDOFF.md
+*.scratch.md
+Paternity Leave Update.txt
+
