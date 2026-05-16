@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.zmarten/meatspace",
   "title": "MeatSpace",
-  "description": "Human-in-the-loop for AI agents. Submit choices, get a human decision.",
-  "version": "0.1.0",
+  "description": "Human approval for AI agents via magic link. Pause your agent; a human decides; webhook back.",
+  "version": "0.2.0",
   "websiteUrl": "https://meatspace.run",
   "repository": {
     "url": "https://github.com/zmarten/meatspace",
@@ -12,7 +12,8 @@
   "icons": [
     {
       "src": "https://meatspace.run/icon.png",
-      "mimeType": "image/png"
+      "mimeType": "image/png",
+      "sizes": ["400x400"]
     }
   ],
   "remotes": [
@@ -37,5 +38,44 @@
         }
       ]
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "tool": "mcp-publisher",
+      "version": "1.7.8",
+      "keywords": [
+        "human-in-the-loop",
+        "hitl",
+        "human-approval",
+        "ai-agent",
+        "agent-safety",
+        "approval-workflow",
+        "agent-oversight"
+      ],
+      "useCases": [
+        "Pause an AI agent before destructive tool calls (file deletion, SQL drops, force-push)",
+        "Route subjective decisions (taste, copy choice, image selection) to a human",
+        "Add human review to autonomous coding agents before merging or deploying",
+        "Approve agent-initiated emails, payments, or external communications"
+      ],
+      "exampleTools": [
+        {
+          "name": "provision_api_key",
+          "auth": "none",
+          "input": {"name": "my-agent", "email": "me@example.com"},
+          "description": "Mint a Bearer token. Rate-limited to 5 keys per email per hour."
+        },
+        {
+          "name": "ask_human",
+          "auth": "Bearer",
+          "input": {
+            "title": "Delete production database?",
+            "content": "Agent wants to run: DROP TABLE users;",
+            "choices": [{"id": "yes", "label": "Yes, drop it"}, {"id": "no", "label": "Abort"}]
+          },
+          "description": "Submit a 2-4 choice question to a human. Long-polls up to 25s; use callback_url for longer waits."
+        }
+      ]
+    }
+  }
 }

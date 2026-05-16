@@ -1,8 +1,58 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 // ─── Const data ───────────────────────────────────────────────────────────────
+
+const INSTALL_TABS: { id: string; label: string; code: string; lang: string }[] = [
+  {
+    id: 'claude-code',
+    label: 'Claude Code',
+    lang: 'bash',
+    code: `# Add MeatSpace as a remote MCP server\nclaude mcp add meatspace --transport http https://meatspace.run/api/mcp\n\n# Then ask Claude:\n#   "Provision a MeatSpace key for me with name 'my-agent' and email 'me@example.com'."\n# Claude will call provision_api_key (no auth) and store the Bearer token.`,
+  },
+  {
+    id: 'claude-desktop',
+    label: 'Claude Desktop / Cursor',
+    lang: 'json',
+    code: `{\n  "mcpServers": {\n    "meatspace": {\n      "type": "streamable-http",\n      "url": "https://meatspace.run/api/mcp",\n      "headers": {\n        "Authorization": "Bearer <your_meatspace_key>"\n      }\n    }\n  }\n}`,
+  },
+  {
+    id: 'cline',
+    label: 'Cline',
+    lang: 'json',
+    code: `// Cline → MCP Servers → Edit JSON\n{\n  "meatspace": {\n    "url": "https://meatspace.run/api/mcp",\n    "transport": "http",\n    "headers": { "Authorization": "Bearer <your_key>" }\n  }\n}`,
+  },
+  {
+    id: 'curl',
+    label: 'curl (no MCP)',
+    lang: 'bash',
+    code: `# 1. Provision a key (no signup)\ncurl -X POST https://meatspace.run/api/keys \\\n  -H 'Content-Type: application/json' \\\n  -d '{"name":"my-agent","email":"me@example.com"}'\n\n# 2. Submit a question\ncurl -X POST https://meatspace.run/api/requests \\\n  -H 'Authorization: Bearer ms_...' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    "agent_name":"my-agent",\n    "title":"Delete prod DB?",\n    "content":"Agent wants to DROP TABLE users",\n    "choices":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]\n  }'\n\n# 3. Wait for the human (long-polls up to 25s)\ncurl https://meatspace.run/api/requests/{id}/wait \\\n  -H 'Authorization: Bearer ms_...'`,
+  },
+];
+
+const FAQ_VISIBLE: { q: string; a: string }[] = [
+  {
+    q: 'What is a human-in-the-loop MCP server?',
+    a: "It lets an AI agent pause mid-task and route a decision to a real human. The agent submits a question and 2–4 choices over MCP; a human selects one via a magic-link page; the agent resumes with the answer. MeatSpace is the hosted version — no reviewer dashboard to build, no signup for the human.",
+  },
+  {
+    q: 'How do I pause my AI agent for a human decision?',
+    a: 'Call the ask_human MCP tool (or POST /api/requests). Long-poll GET /api/requests/{id}/wait or pass callback_url for webhook delivery. The agent blocks until a human taps a choice on their phone.',
+  },
+  {
+    q: 'How is this different from gotoHuman, HumanLayer, ask-human-mcp?',
+    a: 'Hosted, MCP-native, framework-agnostic, reviewer-anonymous. Your reviewer can be a non-developer on a phone — no account, no dashboard, no SSO. HumanLayer is SDK-decorator + IDE-centric. gotoHuman is dashboard-based. ask-human-mcp is local-file-based.',
+  },
+  {
+    q: 'Does it work with LangChain, LangGraph, CrewAI, AutoGen, vanilla SDK?',
+    a: 'Yes — anything that can make an HTTP request or speak MCP. The repo includes a LangGraph template (examples/safe-autonomous-agent) and a vanilla Anthropic SDK template (~120 lines). Works alongside LangGraph’s built-in interrupt() — MeatSpace handles the notification, link, and result delivery.',
+  },
+  {
+    q: 'How do I get an API key?',
+    a: 'No signup. POST /api/keys with a name and email (rate-limited to 5 keys per email per hour), or let your agent call the unauthenticated provision_api_key MCP tool. You get the key back instantly.',
+  },
+];
 
 const FEATURES = [
   {
@@ -250,6 +300,123 @@ function HeroSection() {
           <div className="flex justify-center lg:justify-end">
             <RequestCardMock />
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function InstallSection() {
+  const [activeTab, setActiveTab] = useState(INSTALL_TABS[0].id);
+  const active = INSTALL_TABS.find((t) => t.id === activeTab) ?? INSTALL_TABS[0];
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(active.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <section id="install" className="py-20 px-6 border-t border-hitl-border">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8 flex flex-col gap-3">
+          <span className="label-tracked text-hitl-text-muted text-xs uppercase tracking-widest">
+            INSTALL — 30 SECONDS
+          </span>
+          <h2 className="font-mono text-hitl-text text-2xl font-semibold">
+            Add MeatSpace to your agent
+          </h2>
+          <p className="text-hitl-text-secondary text-sm max-w-2xl">
+            Pick your client. Paste the snippet. Ask your agent to call <code className="code-tag text-hitl-accent text-xs">ask_human</code> before anything irreversible.
+          </p>
+        </div>
+
+        <div className="bg-hitl-surface border border-hitl-border rounded overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex flex-wrap border-b border-hitl-border">
+            {INSTALL_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-3 font-mono text-xs uppercase tracking-wide border-r border-hitl-border transition-colors duration-150 ${
+                  activeTab === tab.id
+                    ? 'bg-hitl-bg text-hitl-accent'
+                    : 'text-hitl-text-muted hover:text-hitl-text'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Code body */}
+          <div className="relative">
+            <pre className="bg-hitl-bg p-5 font-mono text-xs text-hitl-text-secondary leading-relaxed whitespace-pre overflow-x-auto">
+              {active.code}
+            </pre>
+            <button
+              onClick={handleCopy}
+              className="absolute top-3 right-3 px-3 py-1.5 rounded-sm bg-hitl-surface border border-hitl-border text-hitl-text-secondary text-xs hover:border-hitl-border-hover hover:text-hitl-text transition-all duration-150"
+            >
+              {copied ? 'COPIED' : 'COPY'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid sm:grid-cols-3 gap-3">
+          <a
+            href="https://github.com/zmarten/meatspace/tree/mvp/examples/safe-autonomous-agent"
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-col p-4 bg-hitl-surface border border-hitl-border rounded hover:border-hitl-border-hover transition-all duration-150"
+          >
+            <span className="font-mono text-hitl-text text-xs font-semibold">LangGraph template</span>
+            <span className="text-hitl-text-muted text-xs mt-1">examples/safe-autonomous-agent</span>
+          </a>
+          <a
+            href="https://github.com/zmarten/meatspace/tree/mvp/skills/meatspace-hitl"
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-col p-4 bg-hitl-surface border border-hitl-border rounded hover:border-hitl-border-hover transition-all duration-150"
+          >
+            <span className="font-mono text-hitl-text text-xs font-semibold">Claude Code skill</span>
+            <span className="text-hitl-text-muted text-xs mt-1">skills/meatspace-hitl</span>
+          </a>
+          <a
+            href="https://registry.modelcontextprotocol.io/v0/servers?search=meatspace"
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-col p-4 bg-hitl-surface border border-hitl-border rounded hover:border-hitl-border-hover transition-all duration-150"
+          >
+            <span className="font-mono text-hitl-text text-xs font-semibold">MCP Registry</span>
+            <span className="text-hitl-text-muted text-xs mt-1">io.github.zmarten/meatspace</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQSection() {
+  return (
+    <section id="faq" className="py-24 px-6 border-t border-hitl-border bg-hitl-surface">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-12 flex flex-col gap-3">
+          <span className="label-tracked text-hitl-text-muted text-xs uppercase tracking-widest">FAQ</span>
+          <h2 className="font-mono text-hitl-text text-2xl font-semibold">Common questions</h2>
+        </div>
+        <div className="flex flex-col gap-6">
+          {FAQ_VISIBLE.map((item) => (
+            <div key={item.q} className="bg-hitl-bg border border-hitl-border rounded p-6">
+              <h3 className="text-hitl-text text-base font-semibold mb-3 leading-snug">{item.q}</h3>
+              <p className="text-hitl-text-secondary text-sm leading-relaxed">{item.a}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -545,9 +712,11 @@ export default function LandingPage() {
       </section>
       <NavBar />
       <HeroSection />
+      <InstallSection />
       <FeaturesSection />
       <TelemetrySection />
       <FlowDiagramSection />
+      <FAQSection />
       <Footer />
     </main>
   );
