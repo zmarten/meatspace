@@ -1,10 +1,10 @@
 /**
  * In-memory mock data store for local MVP development.
- * Replaces Supabase â€” no external services needed.
+ * Replaces Supabase — no external services needed.
  * Resets every time the dev server restarts.
  */
 
-// Web Crypto globals used â€” no Node.js crypto import needed in Edge runtime
+// Web Crypto globals used — no Node.js crypto import needed in Edge runtime
 
 function hashApiKey(key: string): string {
   return btoa(key);

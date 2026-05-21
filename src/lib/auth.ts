@@ -1,4 +1,4 @@
-// Use Web Crypto globals â€” Edge runtime does not allow `import ... from 'crypto'`
+// Use Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
 
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const encoder = new TextEncoder();

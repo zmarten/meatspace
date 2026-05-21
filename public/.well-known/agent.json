@@ -10,7 +10,11 @@
   "capabilities": {
     "streaming": false,
     "pushNotifications": false,
-    "stateTransitionHistory": false
+    "stateTransitionHistory": false,
+    "interaction_model": "content_plus_choices",
+    "min_choices": 2,
+    "max_choices": 4,
+    "self_service_key_provisioning": true
   },
   "authentication": {
     "schemes": ["bearer"],

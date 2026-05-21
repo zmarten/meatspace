@@ -1,6 +1,6 @@
 import { isAllowedCallbackUrl } from './auth';
 
-// Uses Web Crypto globals â€” Edge runtime does not allow `import ... from 'crypto'`
+// Uses Web Crypto globals — Edge runtime does not allow `import ... from 'crypto'`
 
 /**
  * Delivers a webhook with HMAC-SHA256 signature for authenticity verification.

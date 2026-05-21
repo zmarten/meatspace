@@ -1,4 +1,4 @@
-// crypto.randomUUID() is a Web Crypto global â€” no import needed in Edge runtime
+// crypto.randomUUID() is a Web Crypto global — no import needed in Edge runtime
 import { createServiceClient } from './supabase';
 import { generateReviewToken, hashReviewToken, isAllowedCallbackUrl } from './auth';
 import { sendNotification } from './notifications';

@@ -142,9 +142,14 @@ async function main() {
     assert.equal(agentCard.capabilities.interaction_model, 'content_plus_choices');
     assert.equal(agentCard.capabilities.min_choices, 2);
     assert.equal(agentCard.capabilities.max_choices, 4);
-    assert.deepEqual(mcpManifest.tools.map(tool => tool.name), ['get_service_status', 'ask_human']);
+    assert.deepEqual(mcpManifest.tools.map(tool => tool.name), ['get_service_status', 'provision_api_key', 'ask_human']);
+
+    const provisionApiKey = mcpManifest.tools.find(tool => tool.name === 'provision_api_key');
+    assert.ok(provisionApiKey, 'provision_api_key tool should be present');
+    assert.deepEqual(provisionApiKey.inputSchema.required, ['name', 'email']);
 
     const askHuman = mcpManifest.tools.find(tool => tool.name === 'ask_human');
+    assert.ok(askHuman, 'ask_human tool should be present');
     assert.equal(askHuman.inputSchema.properties.choices.minItems, 2);
     assert.equal(askHuman.inputSchema.properties.choices.maxItems, 4);
   });

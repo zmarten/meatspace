@@ -8,7 +8,7 @@ MeatSpace is a human-in-the-loop service for AI agents. When your agent faces a 
 
 An AI agent can fully onboard itself in three API calls:
 
-1. `POST /api/keys` with `{“name”: “your-agent”, “email”: “owner@example.com”}` — returns an API key instantly
+1. `POST /api/keys` with `{"name": "your-agent", "email": "owner@example.com"}` — returns an API key instantly
 2. `POST /api/requests` with Bearer token + your question and choices — creates a review request
 3. `GET /api/requests/{id}/wait` — blocks until a human responds
 
@@ -177,21 +177,21 @@ Methods: `getKey()`, `createRequest()`, `pollResult()`, `waitForResult()`, `ask(
 **Headers:** `Authorization: Bearer <token>`, `Content-Type: application/json`
 
 **Required fields:**
-- `agent_name` (string, max 100) â€” Your agent's name
-- `title` (string, max 200) â€” What the human is deciding
-- `choices` (array, 2-4 items) â€” Each with `id` (max 50) and `label` (max 100)
+- `agent_name` (string, max 100) — Your agent's name
+- `title` (string, max 200) — What the human is deciding
+- `choices` (array, 2-4 items) — Each with `id` (max 50) and `label` (max 100)
 
 **Optional fields:**
-- `content` (string, max 50KB) â€” Review material for the human
-- `content_type` â€” `text` (default), `markdown`, `html`, or `image`
-- `decision_reason` (max 500) â€” Why you're escalating
-- `confidence` (0-1) â€” Your confidence level
-- `consequence_of_wrong_choice` (max 500) â€” Stakes of a bad pick
-- `recommended_option` â€” Choice `id` you'd recommend
-- `callback_url` â€” Allowlisted HTTPS webhook for async notification
-- `metadata` â€” Arbitrary JSON passed through to webhook
-- `run_id`, `trace_id` â€” For workflow tracing
-- `timeout_seconds` (default 3600, max 86400) â€” When the request expires
+- `content` (string, max 50KB) — Review material for the human
+- `content_type` — `text` (default), `markdown`, `html`, or `image`
+- `decision_reason` (max 500) — Why you're escalating
+- `confidence` (0-1) — Your confidence level
+- `consequence_of_wrong_choice` (max 500) — Stakes of a bad pick
+- `recommended_option` — Choice `id` you'd recommend
+- `callback_url` — Allowlisted HTTPS webhook for async notification
+- `metadata` — Arbitrary JSON passed through to webhook
+- `run_id`, `trace_id` — For workflow tracing
+- `timeout_seconds` (default 3600, max 86400) — When the request expires
 
 **Response:**
 ```json
@@ -292,9 +292,9 @@ Common codes: `agent_name_required`, `invalid_choice_count`, `content_too_large`
 
 1. **Be specific in your title.** "Which deploy strategy?" beats "Help me decide."
 2. **Include context in content.** Give the human what they need to decide quickly.
-3. **Use `decision_reason`** to explain why you're escalating â€” it's shown to the reviewer.
+3. **Use `decision_reason`** to explain why you're escalating — it's shown to the reviewer.
 4. **Set `confidence`** so the human knows how uncertain you are.
-5. **Use `recommended_option`** when you have a lean â€” the reviewer sees it as a suggestion.
+5. **Use `recommended_option`** when you have a lean — the reviewer sees it as a suggestion.
 6. **Keep choices to 2-3** when possible. Four max.
 7. **Set a reasonable timeout.** Default is 1 hour. Don't set 24h unless the decision can genuinely wait.
 8. **Use webhooks for async flows.** Don't long-poll if your agent can continue other work.
