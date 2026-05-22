@@ -2,7 +2,7 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { validateApiKey } from '@/lib/auth';
+import { validateAdminSession, validateApiKey } from '@/lib/auth';
 import { createHitlRequest } from '@/lib/requests';
 import { CreateRequestBody } from '@/types';
 import { withCors, corsOptionsResponse } from '@/lib/cors';
@@ -47,10 +47,19 @@ export async function POST(req: NextRequest) {
 }
 
 export async function OPTIONS() {
-  return corsOptionsResponse('POST, OPTIONS', 'Content-Type, Authorization');
+  return corsOptionsResponse('GET, POST, OPTIONS', 'Content-Type, Authorization');
 }
 
 export async function GET(req: NextRequest) {
+  const sessionValue = req.cookies.get('hitl_admin_session')?.value;
+  const isAdmin = await validateAdminSession(sessionValue);
+  if (!isAdmin) {
+    return withCors(NextResponse.json(
+      { success: false, error: 'Unauthorized: admin session required' },
+      { status: 401 }
+    ));
+  }
+
   const supabase = await createServiceClient();
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status') || 'pending';

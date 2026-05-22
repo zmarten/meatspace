@@ -183,6 +183,15 @@ async function main() {
     assert.match(requestRoute, /\.eq\('status', 'pending'\)/);
   });
 
+  await run('requests list endpoint requires admin authentication', async () => {
+    const requestsRoute = read('src/app/api/requests/route.ts');
+
+    assert.match(requestsRoute, /validateAdminSession/);
+    assert.match(requestsRoute, /hitl_admin_session/);
+    assert.match(requestsRoute, /Unauthorized: admin session required/);
+    assert.match(requestsRoute, /status: 401/);
+  });
+
   await run('TypeScript SDK authenticates poll and long-poll requests', async () => {
     const sdk = read('sdk/typescript/hitl.ts');
 
