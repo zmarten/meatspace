@@ -2,11 +2,24 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { validateAdminSession } from '@/lib/auth';
+
+async function requireAdminSession(req: NextRequest) {
+  const sessionValue = req.cookies.get('hitl_admin_session')?.value;
+  if (await validateAdminSession(sessionValue)) return null;
+  return NextResponse.json(
+    { success: false, error: 'Unauthorized: admin session required' },
+    { status: 401 }
+  );
+}
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauthorized = await requireAdminSession(req);
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
 
   let body: { is_active?: boolean };

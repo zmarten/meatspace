@@ -192,6 +192,18 @@ async function main() {
     assert.match(requestsRoute, /status: 401/);
   });
 
+  await run('admin API key endpoints require admin authentication', async () => {
+    const adminKeysRoute = read('src/app/api/admin/keys/route.ts');
+    const adminKeyRoute = read('src/app/api/admin/keys/[id]/route.ts');
+
+    for (const route of [adminKeysRoute, adminKeyRoute]) {
+      assert.match(route, /validateAdminSession/);
+      assert.match(route, /hitl_admin_session/);
+      assert.match(route, /Unauthorized: admin session required/);
+      assert.match(route, /status: 401/);
+    }
+  });
+
   await run('TypeScript SDK authenticates poll and long-poll requests', async () => {
     const sdk = read('sdk/typescript/hitl.ts');
 

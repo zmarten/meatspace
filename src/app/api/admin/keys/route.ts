@@ -2,9 +2,21 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { generateApiKey, hashApiKey } from '@/lib/auth';
+import { generateApiKey, hashApiKey, validateAdminSession } from '@/lib/auth';
 
-export async function GET() {
+async function requireAdminSession(req: NextRequest) {
+  const sessionValue = req.cookies.get('hitl_admin_session')?.value;
+  if (await validateAdminSession(sessionValue)) return null;
+  return NextResponse.json(
+    { success: false, error: 'Unauthorized: admin session required' },
+    { status: 401 }
+  );
+}
+
+export async function GET(req: NextRequest) {
+  const unauthorized = await requireAdminSession(req);
+  if (unauthorized) return unauthorized;
+
   const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from('hitl_api_keys')
@@ -22,6 +34,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminSession(req);
+  if (unauthorized) return unauthorized;
+
   let body: { name?: string; owner_email?: string };
   try {
     body = await req.json();
