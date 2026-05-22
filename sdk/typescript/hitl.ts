@@ -169,9 +169,11 @@ export class MeatSpace {
    * Poll a request's current status (non-blocking).
    */
   async poll(requestId: string): Promise<AskResult> {
-    const res = await fetch(`${this.baseUrl}/api/requests/${requestId}`);
+    const res = await fetch(`${this.baseUrl}/api/requests/${requestId}`, {
+      headers: this.headers,
+    });
     const json = await res.json();
-    if (!json.success) throw new MeatSpaceError(json.error || 'Not found', res.status);
+    if (!json.success) throw new MeatSpaceError(json.error || 'Not found', res.status, json.code);
     const d = json.data;
     return {
       requestId: d.id,
@@ -194,8 +196,10 @@ export class MeatSpace {
     while (Date.now() < deadline) {
       const res = await fetch(
         `${this.baseUrl}/api/requests/${requestId}/wait?timeout=30000`,
+        { headers: this.headers },
       );
       const json = await res.json();
+      if (!json.success) throw new MeatSpaceError(json.error || `HTTP ${res.status}`, res.status, json.code);
       const d = json.data;
       if (d.status !== 'pending') {
         return {
